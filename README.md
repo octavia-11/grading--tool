@@ -12,6 +12,14 @@
 - 📦 **一键导出 ZIP**：按任务编号命名文件夹，输出带痕迹的图片和错误信息文本
 - ⌨️ **键盘快捷键支持**：提升标注效率
 
+## 🚀 在线使用（推荐）
+
+本工具已通过 **GitHub Pages** 部署，无需下载安装，直接用浏览器访问即可：
+
+👉 **[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
+
+> 注意：所有图片和标注数据均在浏览器本地处理，不会上传到任何服务器。
+
 ## 快速开始
 
 ### 环境要求
@@ -23,13 +31,21 @@
 
 本工具是单个 HTML 文件，部署非常简单：
 
-#### 方式一：直接本地打开（最简单）
+#### 方式一：在线使用（推荐）
+
+直接访问： **[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
+
+1. 点击页面左上角「选择文件夹」按钮
+2. 选择你的批阅任务文件夹
+3. 即可开始标注
+
+#### 方式二：直接本地打开
 
 1. 下载仓库中的 `annotation-tool.html`
 2. 用浏览器直接双击打开该文件
 3. 点击页面左上角「选择文件夹」按钮，选择批阅任务文件夹即可
 
-#### 方式二：通过本地 HTTP 服务器访问
+#### 方式三：通过本地 HTTP 服务器访问
 
 如果你希望更稳定的本地访问体验，可以启动一个静态文件服务器：
 
@@ -46,7 +62,7 @@ npx serve .
 
 然后在浏览器访问 `http://localhost:8080/annotation-tool.html`
 
-#### 方式三：部署到任意静态网站托管服务
+#### 方式四：部署到任意静态网站托管服务
 
 由于本工具是纯前端静态页面，可以部署到：
 
