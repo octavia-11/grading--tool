@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片批阅标注工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航栏 */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .folder-select-btn {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .folder-select-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .export-btn {
+            background: rgba(255,255,255,0.9);
+            color: #764ba2;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .export-btn:hover {
+            background: white;
+        }
+
+        .export-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-info {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        /* 主体区域 */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 左侧标记栏 */
+        .sidebar {
+            width: 300px;
+            background: white;
+            border-right: 1px solid #e8e8e8;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .sidebar-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sidebar-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+
+        /* Badcase 数量 */
+        .badcase-section {
+            background: #fafbfc;
+        }
+
+        .badcase-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .badcase-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #555;
+            transition: all 0.2s;
+        }
+
+        .badcase-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .badcase-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+            color: white;
+        }
+
+        .badcase-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badcase-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .badcase-input:focus {
+            border-color: #667eea;
+        }
+
+        .badcase-input-label {
+            font-size: 13px;
+            color: #888;
+            white-space: nowrap;
+        }
+
+        /* 错误原因分类 */
+        .reason-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .reason-btn {
+            padding: 14px 10px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #555;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .reason-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+            transform: translateY(-1px);
+        }
+
+        .reason-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        /* 任务信息 */
+        .task-info {
+            background: #f8f9ff;
+        }
+
+        .task-info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+            border-bottom: 1px dashed #e0e0e0;
+        }
+
+        .task-info-item:last-child {
+            border-bottom: none;
+        }
+
+        .task-info-label {
+            color: #888;
+        }
+
+        .task-info-value {
+            color: #333;
+            font-weight: 500;
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        /* 操作按钮 */
+        .action-section {
+            margin-top: auto;
+            border-bottom: none;
+        }
+
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .save-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+
+        .save-btn:active {
+            transform: translateY(0);
+        }
+
+        .save-btn.skip-mode {
+            background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+            box-shadow: 0 4px 12px rgba(149, 165, 166, 0.3);
+        }
+
+        .save-btn.skip-mode:hover {
+            box-shadow: 0 6px 16px rgba(149, 165, 166, 0.4);
+        }
+
+        .shortcut-hint {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 10px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        /* 右侧图片区域 */
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #e8e8e8;
+            position: relative;
+        }
+
+        .image-toolbar {
+            background: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e8e8e8;
+            flex-shrink: 0;
+        }
+
+        .toolbar-left {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .tool-btn {
+            padding: 6px 14px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #555;
+            transition: all 0.2s;
+        }
+
+        .tool-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .tool-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .nav-btn {
+            padding: 8px 16px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #555;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* 图片画布区域 */
+        .canvas-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            padding: 20px;
+            position: relative;
+        }
+
+        .image-container {
+            position: relative;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            border-radius: 4px;
+            overflow: hidden;
+            background: white;
+            max-width: 100%;
+        }
+
+        .image-container img {
+            display: block;
+            max-width: 100%;
+            max-height: calc(100vh - 200px);
+            object-fit: contain;
+        }
+
+        .drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+
+        /* 缩略图侧边栏 */
+        .thumbnail-bar {
+            position: fixed;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            background: white;
+            border-radius: 8px 0 0 8px;
+            box-shadow: -2px 0 12px rgba(0,0,0,0.08);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 70vh;
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        .thumbnail-item {
+            width: 56px;
+            height: 56px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .thumbnail-item:hover {
+            border-color: #667eea;
+        }
+
+        .thumbnail-item.active {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        .thumbnail-item.marked::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background: #e74c3c;
+            border-radius: 50%;
+        }
+
+        .thumbnail-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* 提示信息 */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        /* 空状态 */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #999;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .empty-state h2 {
+            font-size: 20px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 24px;
+        }
+
+        .empty-state .folder-select-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        /* 线条粗细选择 */
+        .brush-size {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 10px;
+        }
+
+        .brush-size-label {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .size-options {
+            display: flex;
+            gap: 4px;
+        }
+
+        .size-dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid #e0e0e0;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .size-dot:hover {
+            border-color: #667eea;
+        }
+
+        .size-dot.active {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+
+        .size-dot-inner {
+            background: #e74c3c;
+            border-radius: 50%;
+        }
+
+        /* 隐藏的文件输入 */
+        #folderInput {
+            display: none;
+        }
+
+        /* 加载动画 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 2000;
+        }
+
+        .loading-overlay.show {
+            display: flex;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e0e0e0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* 标注统计 */
+        .stats-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="folderInput" webkitdirectory directory multiple>
+
+    <!-- 顶部导航 -->
+    <div class="header">
+        <h1>📋 图片批阅标注工具</h1>
+        <div class="header-controls">
+            <span class="progress-info" id="progressInfo">请选择批阅任务文件夹</span>
+            <span class="stats-badge" id="statsBadge" style="display:none;">已标注: 0</span>
+            <button class="folder-select-btn" onclick="selectFolder()">📁 选择文件夹</button>
+            <button class="export-btn" id="exportBtn" onclick="exportResults()" disabled>📦 导出结果</button>
+        </div>
+    </div>
+
+    <!-- 主体区域 -->
+    <div class="main-container" id="mainContainer">
+        <!-- 空状态 -->
+        <div class="empty-state" id="emptyState">
+            <div class="empty-state-icon">📁</div>
+            <h2>欢迎使用图片批阅标注工具</h2>
+            <p>请选择一个批阅任务文件夹开始标注<br>文件夹结构示例：任务文件夹 / 子文件夹 / 序号文件夹 / (图片 + yaml)</p>
+            <button class="folder-select-btn" onclick="selectFolder()">选择批阅任务文件夹</button>
+        </div>
+
+        <!-- 工作区 -->
+        <div class="sidebar" id="sidebar" style="display:none;">
+            <!-- Badcase 数量 -->
+            <div class="sidebar-section badcase-section">
+                <div class="sidebar-title">Badcase 数量</div>
+                <div class="badcase-buttons">
+                    <button class="badcase-btn" data-value="1" onclick="selectBadcase(this)">1</button>
+                    <button class="badcase-btn" data-value="2" onclick="selectBadcase(this)">2</button>
+                </div>
+                <div class="badcase-input-wrapper">
+                    <input type="number" class="badcase-input" id="badcaseInput" placeholder="输入数量" min="0" oninput="onBadcaseInput(this)">
+                    <span class="badcase-input-label">个</span>
+                </div>
+            </div>
+
+            <!-- 错误原因分类 -->
+            <div class="sidebar-section">
+                <div class="sidebar-title">错误原因分类（可多选）</div>
+                <div class="reason-grid">
+                    <button class="reason-btn" data-reason="切题" onclick="toggleReason(this)">切题</button>
+                    <button class="reason-btn" data-reason="OCR" onclick="toggleReason(this)">OCR</button>
+                    <button class="reason-btn" data-reason="解题" onclick="toggleReason(this)">解题</button>
+                    <button class="reason-btn" data-reason="判题" onclick="toggleReason(this)">判题</button>
+                </div>
+            </div>
+
+            <!-- 任务信息 -->
+            <div class="sidebar-section task-info">
+                <div class="sidebar-title">当前任务信息</div>
+                <div class="task-info-item">
+                    <span class="task-info-label">任务编号</span>
+                    <span class="task-info-value" id="taskId">-</span>
+                </div>
+                <div class="task-info-item">
+                    <span class="task-info-label">文件夹</span>
+                    <span class="task-info-value" id="folderName">-</span>
+                </div>
+                <div class="task-info-item">
+                    <span class="task-info-label">图片名称</span>
+                    <span class="task-info-value" id="imageName">-</span>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="sidebar-section action-section">
+                <button class="save-btn" id="saveBtn" onclick="saveAnnotation()">保存标注 / 跳过此图</button>
+                <div class="shortcut-hint">
+                    ← → 切换图片<br>
+                    S / Enter 保存或跳过
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧图片区域 -->
+        <div class="content-area" id="contentArea" style="display:none;">
+            <div class="image-toolbar">
+                <div class="toolbar-left">
+                    <button class="tool-btn active" id="drawTool" onclick="setTool('draw')">✏️ 画笔</button>
+                    <button class="tool-btn" id="eraseTool" onclick="setTool('erase')">🧹 橡皮</button>
+                    <button class="tool-btn" onclick="clearCanvas()">清空痕迹</button>
+                    <div class="brush-size">
+                        <span class="brush-size-label">粗细:</span>
+                        <div class="size-options">
+                            <div class="size-dot active" data-size="2" onclick="setBrushSize(2, this)">
+                                <div class="size-dot-inner" style="width:4px;height:4px;"></div>
+                            </div>
+                            <div class="size-dot" data-size="4" onclick="setBrushSize(4, this)">
+                                <div class="size-dot-inner" style="width:8px;height:8px;"></div>
+                            </div>
+                            <div class="size-dot" data-size="6" onclick="setBrushSize(6, this)">
+                                <div class="size-dot-inner" style="width:12px;height:12px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="toolbar-right">
+                    <button class="nav-btn" onclick="prevImage()" id="prevBtn">← 上一张</button>
+                    <button class="nav-btn" onclick="nextImage()" id="nextBtn">下一张 →</button>
+                </div>
+            </div>
+
+            <div class="canvas-wrapper">
+                <div class="image-container" id="imageContainer">
+                    <img id="previewImage" src="" alt="预览图片" draggable="false">
+                    <canvas class="drawing-canvas" id="drawingCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 缩略图栏 -->
+    <div class="thumbnail-bar" id="thumbnailBar" style="display:none;">
+        <!-- 动态生成 -->
+    </div>
+
+    <!-- 提示信息 -->
+    <div class="toast" id="toast"></div>
+
+    <!-- 加载动画 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">正在加载...</div>
+    </div>
+
+    <script>
+        // ============ 全局状态 ============
+        let taskItems = [];      // 所有任务项 [{taskId, folderPath, imageFile, yamlFile, imageUrl}]
+        let currentIndex = 0;    // 当前索引
+        let currentTool = 'draw';
+        let brushSize = 2;
+        let isDrawing = false;
+        let annotations = {};    // taskId -> annotation 对象
+        let markedCount = 0;     // 已标注数量
+
+        // ============ DOM 元素 ============
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const img = document.getElementById('previewImage');
+        const folderInput = document.getElementById('folderInput');
+
+        // ============ 文件夹选择 ============
+        function selectFolder() {
+            folderInput.click();
+        }
+
+        folderInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            showLoading('正在扫描文件夹...');
+
+            try {
+                await parseFolder(files);
+                if (taskItems.length === 0) {
+                    showToast('未找到有效的任务图片，请检查文件夹结构');
+                    hideLoading();
+                    return;
+                }
+
+                initUI();
+                initThumbnails();
+                loadImage(0);
+                updateStats();
+                hideLoading();
+                showToast(`已加载 ${taskItems.length} 个任务`);
+            } catch (err) {
+                console.error(err);
+                showToast('加载失败: ' + err.message);
+                hideLoading();
+            }
+
+            // 清空 input 以便重复选择同一文件夹
+            folderInput.value = '';
+        });
+
+        // ============ 解析文件夹 ============
+        async function parseFolder(files) {
+            taskItems = [];
+
+            // 按路径分组
+            const dirMap = {};
+            for (const file of files) {
+                const parts = file.webkitRelativePath.split('/');
+                // parts[0] = 根文件夹名
+                // parts[1] = 子文件夹 (如 "未匹配", "学生卷")
+                // parts[2] = 序号文件夹 (如 "1", "2")
+                // parts[3] = 文件
+                if (parts.length < 4) continue;
+
+                const subFolder = parts[1];
+                const idxFolder = parts[2];
+                const fileName = parts[3];
+                const dirKey = `${subFolder}/${idxFolder}`;
+
+                if (!dirMap[dirKey]) {
+                    dirMap[dirKey] = { files: [], path: dirKey, subFolder, idxFolder };
+                }
+                dirMap[dirKey].files.push(file);
+            }
+
+            // 处理每个目录
+            for (const key in dirMap) {
+                const dir = dirMap[key];
+                const yamlFile = dir.files.find(f => f.name.endsWith('.yaml') || f.name.endsWith('.yml'));
+                const imageFile = dir.files.find(f => isImageFile(f.name));
+
+                if (!yamlFile || !imageFile) continue;
+
+                // 读取 yaml
+                const yamlText = await readFileAsText(yamlFile);
+                const taskIds = parseYamlTaskIds(yamlText);
+                if (!taskIds || taskIds.length === 0) continue;
+
+                const taskId = taskIds[0];
+                const imageUrl = URL.createObjectURL(imageFile);
+
+                taskItems.push({
+                    taskId,
+                    folderPath: dir.path,
+                    subFolder: dir.subFolder,
+                    idxFolder: dir.idxFolder,
+                    imageFile,
+                    yamlFile,
+                    imageUrl,
+                    imageName: imageFile.name
+                });
+            }
+
+            // 按文件夹路径排序
+            taskItems.sort((a, b) => {
+                if (a.subFolder !== b.subFolder) return a.subFolder.localeCompare(b.subFolder);
+                // 尝试按数字排序序号
+                const na = parseInt(a.idxFolder);
+                const nb = parseInt(b.idxFolder);
+                if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                return a.idxFolder.localeCompare(b.idxFolder);
+            });
+        }
+
+        function isImageFile(name) {
+            const ext = name.toLowerCase();
+            return ext.endsWith('.jpg') || ext.endsWith('.jpeg') || ext.endsWith('.png') || ext.endsWith('.gif') || ext.endsWith('.webp') || ext.endsWith('.bmp');
+        }
+
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+
+        function parseYamlTaskIds(text) {
+            // 简单解析 task_ids:
+            //   - "uuid"
+            const lines = text.split('\n');
+            const ids = [];
+            let inTaskIds = false;
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('task_ids:')) {
+                    inTaskIds = true;
+                    continue;
+                }
+                if (inTaskIds) {
+                    const match = trimmed.match(/^-\s*"?([^"]+)"?$/);
+                    if (match) {
+                        ids.push(match[1]);
+                    } else if (trimmed && !trimmed.startsWith('-')) {
+                        break;
+                    }
+                }
+            }
+            return ids;
+        }
+
+        // ============ UI 初始化 ============
+        function initUI() {
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('sidebar').style.display = 'flex';
+            document.getElementById('contentArea').style.display = 'flex';
+            document.getElementById('thumbnailBar').style.display = 'flex';
+            document.getElementById('exportBtn').disabled = false;
+            document.getElementById('statsBadge').style.display = 'inline';
+        }
+
+        // ============ 缩略图 ============
+        function initThumbnails() {
+            const bar = document.getElementById('thumbnailBar');
+            bar.innerHTML = '';
+            taskItems.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = 'thumbnail-item' + (i === 0 ? ' active' : '');
+                if (annotations[item.taskId]) div.classList.add('marked');
+                div.textContent = i + 1;
+                div.onclick = () => loadImage(i);
+                bar.appendChild(div);
+            });
+        }
+
+        function updateThumbnail(index) {
+            const items = document.querySelectorAll('.thumbnail-item');
+            items.forEach((el, i) => {
+                el.classList.toggle('active', i === index);
+                const taskId = taskItems[i]?.taskId;
+                if (annotations[taskId]) {
+                    el.classList.add('marked');
+                }
+            });
+        }
+
+        // ============ 图片加载 ============
+        function loadImage(index) {
+            if (index < 0 || index >= taskItems.length) return;
+
+            currentIndex = index;
+            const item = taskItems[index];
+
+            // 更新信息
+            document.getElementById('taskId').textContent = item.taskId;
+            document.getElementById('folderName').textContent = item.folderPath;
+            document.getElementById('imageName').textContent = item.imageName;
+            document.getElementById('progressInfo').textContent = `任务 ${index + 1} / ${taskItems.length}`;
+
+            // 导航按钮
+            document.getElementById('prevBtn').disabled = index === 0;
+            document.getElementById('nextBtn').disabled = index === taskItems.length - 1;
+
+            // 加载图片
+            img.src = item.imageUrl;
+            img.onload = () => {
+                initCanvas();
+                restoreAnnotation(item.taskId);
+            };
+
+            // 更新缩略图
+            updateThumbnail(index);
+
+            // 重置侧边栏（如果有保存的数据会再恢复）
+            resetSidebar();
+        }
+
+        function initCanvas() {
+            const rect = img.getBoundingClientRect();
+            // 使用图片原始尺寸作为 canvas 分辨率，保证导出质量
+            canvas.width = img.naturalWidth || rect.width;
+            canvas.height = img.naturalHeight || rect.height;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+        }
+
+        // ============ Badcase 数量选择 ============
+        function selectBadcase(btn) {
+            document.querySelectorAll('.badcase-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('badcaseInput').value = btn.dataset.value;
+            updateSaveButton();
+        }
+
+        function onBadcaseInput(input) {
+            document.querySelectorAll('.badcase-btn').forEach(b => b.classList.remove('active'));
+            updateSaveButton();
+        }
+
+        // ============ 错误原因选择 ============
+        function toggleReason(btn) {
+            btn.classList.toggle('active');
+            updateSaveButton();
+        }
+
+        // ============ 更新保存按钮状态 ============
+        function updateSaveButton() {
+            const hasBadcase = getBadcaseCount() > 0;
+            const hasReason = getSelectedReasons().length > 0;
+            const hasDrawing = !isCanvasEmpty();
+            const hasAnnotation = hasBadcase || hasReason || hasDrawing;
+
+            const saveBtn = document.getElementById('saveBtn');
+            if (hasAnnotation) {
+                saveBtn.textContent = '✓ 保存标注';
+                saveBtn.classList.remove('skip-mode');
+            } else {
+                saveBtn.textContent = '→ 跳过此图';
+                saveBtn.classList.add('skip-mode');
+            }
+        }
+
+        // ============ 工具切换 ============
+        function setTool(tool) {
+            currentTool = tool;
+            document.getElementById('drawTool').classList.toggle('active', tool === 'draw');
+            document.getElementById('eraseTool').classList.toggle('active', tool === 'erase');
+            canvas.style.cursor = tool === 'draw' ? 'crosshair' : 'cell';
+        }
+
+        function setBrushSize(size, el) {
+            brushSize = size;
+            document.querySelectorAll('.size-dot').forEach(d => d.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateSaveButton();
+        }
+
+        // ============ Canvas 绘制 ============
+        function getCanvasPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', endDraw);
+        canvas.addEventListener('mouseleave', endDraw);
+
+        // 触摸支持
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            const mouseEvent = new MouseEvent('mouseup', {});
+            canvas.dispatchEvent(mouseEvent);
+        });
+
+        function startDraw(e) {
+            isDrawing = true;
+            const pos = getCanvasPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            ctx.strokeStyle = currentTool === 'draw' ? '#e74c3c' : 'rgba(255,255,255,0.95)';
+            ctx.lineWidth = brushSize * (currentTool === 'erase' ? 4 : 1);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const pos = getCanvasPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        }
+
+        function endDraw() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            ctx.closePath();
+            updateSaveButton();
+        }
+
+        function isCanvasEmpty() {
+            const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            for (let i = 3; i < pixelData.length; i += 4) {
+                if (pixelData[i] > 0) return false;
+            }
+            return true;
+        }
+
+        // ============ 导航 ============
+        function prevImage() {
+            if (currentIndex > 0) loadImage(currentIndex - 1);
+        }
+
+        function nextImage() {
+            if (currentIndex < taskItems.length - 1) loadImage(currentIndex + 1);
+        }
+
+        // ============ 保存 / 跳过 ============
+        function saveAnnotation() {
+            const item = taskItems[currentIndex];
+            const badcaseCount = getBadcaseCount();
+            const reasons = getSelectedReasons();
+            const hasDrawing = !isCanvasEmpty();
+            const hasAnnotation = badcaseCount > 0 || reasons.length > 0 || hasDrawing;
+
+            if (hasAnnotation) {
+                // 保存标注
+                const drawingData = hasDrawing ? canvas.toDataURL('image/png') : null;
+                annotations[item.taskId] = {
+                    taskId: item.taskId,
+                    folderPath: item.folderPath,
+                    imageName: item.imageName,
+                    badcaseCount,
+                    reasons,
+                    hasDrawing,
+                    drawingData,
+                    timestamp: new Date().toISOString()
+                };
+                showToast('✓ 标注已保存');
+            } else {
+                // 跳过：如果之前有标注则删除
+                if (annotations[item.taskId]) {
+                    delete annotations[item.taskId];
+                }
+                showToast('→ 已跳过');
+            }
+
+            // 更新缩略图状态
+            updateThumbnail(currentIndex);
+            updateStats();
+
+            // 自动下一张
+            if (currentIndex < taskItems.length - 1) {
+                setTimeout(() => loadImage(currentIndex + 1), 300);
+            } else {
+                showToast('已到最后一张！');
+            }
+        }
+
+        function getBadcaseCount() {
+            const val = document.getElementById('badcaseInput').value;
+            return val ? parseInt(val) || 0 : 0;
+        }
+
+        function getSelectedReasons() {
+            return Array.from(document.querySelectorAll('.reason-btn.active')).map(b => b.dataset.reason);
+        }
+
+        function resetSidebar() {
+            document.querySelectorAll('.badcase-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('badcaseInput').value = '';
+            document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
+            updateSaveButton();
+        }
+
+        function restoreAnnotation(taskId) {
+            const ann = annotations[taskId];
+            if (!ann) {
+                clearCanvas();
+                resetSidebar();
+                return;
+            }
+
+            // 恢复 badcase
+            if (ann.badcaseCount) {
+                const btn = document.querySelector(`.badcase-btn[data-value="${ann.badcaseCount}"]`);
+                if (btn) {
+                    btn.classList.add('active');
+                } else {
+                    document.getElementById('badcaseInput').value = ann.badcaseCount;
+                }
+            }
+
+            // 恢复原因
+            if (ann.reasons) {
+                ann.reasons.forEach(r => {
+                    const btn = document.querySelector(`.reason-btn[data-reason="${r}"]`);
+                    if (btn) btn.classList.add('active');
+                });
+            }
+
+            // 恢复画布
+            clearCanvas();
+            if (ann.drawingData) {
+                const image = new Image();
+                image.onload = () => {
+                    ctx.drawImage(image, 0, 0);
+                    updateSaveButton();
+                };
+                image.src = ann.drawingData;
+            } else {
+                updateSaveButton();
+            }
+        }
+
+        function updateStats() {
+            markedCount = Object.keys(annotations).length;
+            document.getElementById('statsBadge').textContent = `已标注: ${markedCount}`;
+        }
+
+        // ============ 导出结果 ============
+        async function exportResults() {
+            const annList = Object.values(annotations);
+            if (annList.length === 0) {
+                showToast('没有标注数据可导出');
+                return;
+            }
+
+            showLoading('正在打包导出...');
+
+            try {
+                const zip = new JSZip();
+
+                for (const ann of annList) {
+                    const folderName = ann.taskId;
+                    const folder = zip.folder(folderName);
+
+                    // 1. 生成带痕迹的图片
+                    const item = taskItems.find(t => t.taskId === ann.taskId);
+                    if (item) {
+                        const mergedImage = await mergeImageWithDrawing(item.imageUrl, ann.drawingData);
+                        const imageData = mergedImage.split(',')[1];
+                        const ext = item.imageName.split('.').pop();
+                        folder.file(`marked_${item.imageName}`, imageData, { base64: true });
+                    }
+
+                    // 2. 生成错误信息 txt
+                    const errorContent = generateErrorTxt(ann);
+                    folder.file('error_info.txt', errorContent);
+
+                    // 3. 复制任务编号
+                    folder.file('task_id.txt', ann.taskId);
+                }
+
+                // 生成总报告
+                const report = generateReport();
+                zip.file('标注报告.txt', report);
+
+                const content = await zip.generateAsync({ type: 'blob' });
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                saveAs(content, `批阅标注结果_${timestamp}.zip`);
+
+                hideLoading();
+                showToast(`✓ 已导出 ${annList.length} 个标注结果`);
+            } catch (err) {
+                console.error(err);
+                hideLoading();
+                showToast('导出失败: ' + err.message);
+            }
+        }
+
+        function mergeImageWithDrawing(imageUrl, drawingData) {
+            return new Promise((resolve, reject) => {
+                const image = new Image();
+                image.crossOrigin = 'anonymous';
+                image.onload = () => {
+                    const c = document.createElement('canvas');
+                    c.width = image.naturalWidth;
+                    c.height = image.naturalHeight;
+                    const cx = c.getContext('2d');
+                    cx.drawImage(image, 0, 0);
+
+                    if (drawingData) {
+                        const drawImg = new Image();
+                        drawImg.onload = () => {
+                            cx.drawImage(drawImg, 0, 0);
+                            resolve(c.toDataURL('image/jpeg', 0.95));
+                        };
+                        drawImg.onerror = reject;
+                        drawImg.src = drawingData;
+                    } else {
+                        resolve(c.toDataURL('image/jpeg', 0.95));
+                    }
+                };
+                image.onerror = reject;
+                image.src = imageUrl;
+            });
+        }
+
+        function generateErrorTxt(ann) {
+            const lines = [
+                `任务编号: ${ann.taskId}`,
+                `文件夹: ${ann.folderPath}`,
+                `图片名称: ${ann.imageName}`,
+                `标注时间: ${ann.timestamp}`,
+                '',
+                `Badcase 数量: ${ann.badcaseCount}`,
+                `错误原因: ${ann.reasons.join(', ')}`,
+                '',
+                '--- 详细信息 ---',
+                `是否有勾画痕迹: ${ann.hasDrawing ? '是' : '否'}`
+            ];
+            return lines.join('\n');
+        }
+
+        function generateReport() {
+            const lines = [
+                '批阅标注结果报告',
+                '==================',
+                `生成时间: ${new Date().toLocaleString()}`,
+                `总任务数: ${taskItems.length}`,
+                `已标注数: ${Object.keys(annotations).length}`,
+                `跳过数: ${taskItems.length - Object.keys(annotations).length}`,
+                '',
+                '--- 标注明细 ---',
+                ''
+            ];
+
+            Object.values(annotations).forEach((ann, i) => {
+                lines.push(`${i + 1}. 任务: ${ann.taskId}`);
+                lines.push(`   路径: ${ann.folderPath}`);
+                lines.push(`   Badcase: ${ann.badcaseCount} 个`);
+                lines.push(`   原因: ${ann.reasons.join(', ')}`);
+                lines.push('');
+            });
+
+            return lines.join('\n');
+        }
+
+        // ============ 提示 ============
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.add('show');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('show');
+        }
+
+        // ============ 键盘快捷键 ============
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') {
+                if (e.key === 'Enter') {
+                    e.target.blur();
+                    saveAnnotation();
+                }
+                return;
+            }
+
+            switch(e.key) {
+                case 'ArrowLeft': prevImage(); break;
+                case 'ArrowRight': nextImage(); break;
+                case 's': case 'S': case 'Enter':
+                    e.preventDefault();
+                    saveAnnotation();
+                    break;
+            }
+        });
+
+        // ============ 窗口大小改变时重置 canvas ============
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (taskItems.length > 0) {
+                    initCanvas();
+                    const item = taskItems[currentIndex];
+                    restoreAnnotation(item.taskId);
+                }
+            }, 200);
+        });
+    </script>
+</body>
+</html>
