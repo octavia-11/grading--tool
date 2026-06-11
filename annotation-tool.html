@@ -127,6 +127,74 @@
             border-radius: 2px;
         }
 
+        /* 绘制工具 */
+        .drawing-tools {
+            background: #f8faff;
+        }
+
+        .tool-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .tool-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .color-options {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .color-label {
+            font-size: 12px;
+            color: #888;
+            margin-right: 4px;
+        }
+
+        .color-dot {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+        }
+
+        .color-dot:hover {
+            transform: scale(1.1);
+        }
+
+        .color-dot.active {
+            border-color: #333;
+            transform: scale(1.1);
+        }
+
+        .color-dot.red {
+            background: #e74c3c;
+        }
+
+        .color-dot.blue {
+            background: #3498db;
+        }
+
+        .tool-btn.clear-btn {
+            width: 100%;
+            padding: 8px;
+            color: #e74c3c;
+            border-color: #f5c6cb;
+            background: #fff5f5;
+        }
+
+        .tool-btn.clear-btn:hover {
+            background: #ffe0e0;
+            border-color: #e74c3c;
+        }
+
         /* Badcase 数量 */
         .badcase-section {
             background: #fafbfc;
@@ -396,7 +464,7 @@
         .image-container img {
             display: block;
             max-width: 100%;
-            max-height: calc(100vh - 200px);
+            max-height: calc(100vh - 140px);
             object-fit: contain;
         }
 
@@ -653,6 +721,34 @@
 
         <!-- 工作区 -->
         <div class="sidebar" id="sidebar" style="display:none;">
+            <!-- 绘制工具 -->
+            <div class="sidebar-section drawing-tools">
+                <div class="sidebar-title">绘制工具</div>
+                <div class="tool-row">
+                    <span class="color-label">颜色:</span>
+                    <div class="color-options">
+                        <div class="color-dot red active" data-color="#e74c3c" onclick="setBrushColor('#e74c3c', this)" title="红色画笔"></div>
+                        <div class="color-dot blue" data-color="#3498db" onclick="setBrushColor('#3498db', this)" title="蓝色画笔"></div>
+                    </div>
+                    <button class="tool-btn" id="eraseTool" onclick="setTool('erase')">🧹 橡皮</button>
+                </div>
+                <div class="tool-row">
+                    <span class="brush-size-label">粗细:</span>
+                    <div class="size-options">
+                        <div class="size-dot active" data-size="2" onclick="setBrushSize(2, this)">
+                            <div class="size-dot-inner" style="width:4px;height:4px;"></div>
+                        </div>
+                        <div class="size-dot" data-size="4" onclick="setBrushSize(4, this)">
+                            <div class="size-dot-inner" style="width:8px;height:8px;"></div>
+                        </div>
+                        <div class="size-dot" data-size="6" onclick="setBrushSize(6, this)">
+                            <div class="size-dot-inner" style="width:12px;height:12px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <button class="tool-btn clear-btn" onclick="clearCanvas()">🗑️ 清空痕迹</button>
+            </div>
+
             <!-- Badcase 数量 -->
             <div class="sidebar-section badcase-section">
                 <div class="sidebar-title">Badcase 数量</div>
@@ -707,24 +803,8 @@
         <!-- 右侧图片区域 -->
         <div class="content-area" id="contentArea" style="display:none;">
             <div class="image-toolbar">
-                <div class="toolbar-left">
-                    <button class="tool-btn active" id="drawTool" onclick="setTool('draw')">✏️ 画笔</button>
-                    <button class="tool-btn" id="eraseTool" onclick="setTool('erase')">🧹 橡皮</button>
-                    <button class="tool-btn" onclick="clearCanvas()">清空痕迹</button>
-                    <div class="brush-size">
-                        <span class="brush-size-label">粗细:</span>
-                        <div class="size-options">
-                            <div class="size-dot active" data-size="2" onclick="setBrushSize(2, this)">
-                                <div class="size-dot-inner" style="width:4px;height:4px;"></div>
-                            </div>
-                            <div class="size-dot" data-size="4" onclick="setBrushSize(4, this)">
-                                <div class="size-dot-inner" style="width:8px;height:8px;"></div>
-                            </div>
-                            <div class="size-dot" data-size="6" onclick="setBrushSize(6, this)">
-                                <div class="size-dot-inner" style="width:12px;height:12px;"></div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="toolbar-left" style="font-size: 13px; color: #888;">
+                    🖱️ 按住鼠标左键在图片上绘制，滚轮可缩放页面
                 </div>
                 <div class="toolbar-right">
                     <button class="nav-btn" onclick="prevImage()" id="prevBtn">← 上一张</button>
@@ -760,6 +840,7 @@
         let taskItems = [];      // 所有任务项 [{taskId, folderPath, imageFile, yamlFile, imageUrl}]
         let currentIndex = 0;    // 当前索引
         let currentTool = 'draw';
+        let brushColor = '#e74c3c';
         let brushSize = 2;
         let isDrawing = false;
         let annotations = {};    // taskId -> annotation 对象
@@ -1022,9 +1103,23 @@
         // ============ 工具切换 ============
         function setTool(tool) {
             currentTool = tool;
-            document.getElementById('drawTool').classList.toggle('active', tool === 'draw');
             document.getElementById('eraseTool').classList.toggle('active', tool === 'erase');
+            document.querySelectorAll('.color-dot').forEach(d => {
+                d.style.opacity = tool === 'erase' ? '0.5' : '1';
+            });
             canvas.style.cursor = tool === 'draw' ? 'crosshair' : 'cell';
+        }
+
+        function setBrushColor(color, el) {
+            brushColor = color;
+            currentTool = 'draw';
+            document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('eraseTool').classList.remove('active');
+            document.querySelectorAll('.color-dot').forEach(d => {
+                d.style.opacity = '1';
+            });
+            canvas.style.cursor = 'crosshair';
         }
 
         function setBrushSize(size, el) {
@@ -1085,7 +1180,7 @@
             const pos = getCanvasPos(e);
             ctx.beginPath();
             ctx.moveTo(pos.x, pos.y);
-            ctx.strokeStyle = currentTool === 'draw' ? '#e74c3c' : 'rgba(255,255,255,0.95)';
+            ctx.strokeStyle = currentTool === 'draw' ? brushColor : 'rgba(255,255,255,0.95)';
             ctx.lineWidth = brushSize * (currentTool === 'erase' ? 4 : 1);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';

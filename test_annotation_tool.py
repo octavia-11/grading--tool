@@ -297,8 +297,27 @@ async def run_tests():
             print("  ✓ 画笔粗细切换正常")
             passed += 1
             
-            # ============ 测试 12: 保存按钮动态文本 ============
-            print("\n[测试 12] 保存按钮动态文本...")
+            # ============ 测试 12: 画笔颜色切换（蓝色画笔）============
+            print("\n[测试 12] 画笔颜色切换（蓝色画笔）...")
+            redDot = page.locator('.color-dot[data-color="#e74c3c"]')
+            blueDot = page.locator('.color-dot[data-color="#3498db"]')
+            
+            await blueDot.click()
+            await expect(blueDot).to_have_class(re.compile("active"))
+            await expect(redDot).not_to_have_class(re.compile("active"))
+            
+            # 验证 JS 中 brushColor 已切换
+            currentColor = await page.evaluate("() => brushColor")
+            assert currentColor == "#3498db", f"画笔颜色应为蓝色，实际: {currentColor}"
+            
+            await redDot.click()
+            await expect(redDot).to_have_class(re.compile("active"))
+            await expect(blueDot).not_to_have_class(re.compile("active"))
+            print("  ✓ 蓝色画笔切换正常")
+            passed += 1
+            
+            # ============ 测试 13: 保存按钮动态文本 ============
+            print("\n[测试 13] 保存按钮动态文本...")
             # 清空所有选择
             await page.evaluate("() => { resetSidebar(); clearCanvas(); }")
             await asyncio.sleep(0.2)
@@ -313,8 +332,8 @@ async def run_tests():
             print("  ✓ 保存按钮动态文本切换正常")
             passed += 1
             
-            # ============ 测试 13: YAML 解析 ============
-            print("\n[测试 13] YAML 解析函数...")
+            # ============ 测试 14: YAML 解析 ============
+            print("\n[测试 14] YAML 解析函数...")
             try:
                 yaml_text = 'task_ids:\n  - "db45c6d8-04ed-4a71-a7d2-2179957bd9b4"\n  - "second-id-here"'
                 context2 = await browser.new_context(viewport={'width': 800, 'height': 600})
@@ -335,8 +354,8 @@ async def run_tests():
                 print(f"  ✗ YAML 解析测试失败: {e}")
                 failed += 1
             
-            # ============ 测试 14: 报告生成 ============
-            print("\n[测试 14] 报告生成功能...")
+            # ============ 测试 15: 报告生成 ============
+            print("\n[测试 15] 报告生成功能...")
             try:
                 context3 = await browser.new_context(viewport={'width': 800, 'height': 600})
                 page3 = await context3.new_page()
