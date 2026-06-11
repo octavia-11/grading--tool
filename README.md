@@ -1,24 +1,45 @@
-# 图片批阅标注工具
+# 图片批阅标注工具 + 结果查看工具
 
-一个基于浏览器的本地静态网页工具，用于对批阅任务图片进行标注。支持鼠标勾画标记、选择 Badcase 数量、多选错误原因，并将结果打包导出。
+本项目包含两个基于浏览器的本地静态网页工具：
+
+1. **图片批阅标注工具** — 对批阅任务图片进行标注，支持鼠标勾画、选择 Badcase 数量和错误原因，并将结果打包导出
+2. **标注结果查看工具** — 查看标注工具导出的结果，浏览带批注的图片和错误信息，并支持复制任务 ID
+
+所有数据均在浏览器本地处理，不会上传到任何服务器。
 
 ## 功能特性
 
+### 标注工具功能
+
 - 🖼️ **自动识别任务结构**：选择批阅任务文件夹后，自动匹配图片与 `metadata.yaml` 中的任务编号
-- ✏️ **红笔勾画标记**：直接在图片上绘制痕迹，支持画笔、橡皮擦、线条粗细调节
+- ✏️ **红笔/蓝笔勾画标记**：直接在图片上绘制痕迹，支持画笔、橡皮擦、线条粗细调节
 - 🔢 **Badcase 数量**：提供 1、2 快捷按钮，也支持自定义输入
 - 🏷️ **错误原因分类**：切题、OCR、解题、判题，四类原因支持多选
 - 💾 **保存/跳过合一**：有标注信息则保存，无标注则跳过，自动跳转下一张
 - 📦 **一键导出 ZIP**：按任务编号命名文件夹，输出带痕迹的图片和错误信息文本
+- 🔍 **图片缩放模式**：适应高度（一屏看全图）/ 适应宽度（横向铺满，纵向滚动）
 - ⌨️ **键盘快捷键支持**：提升标注效率
+
+### 结果查看工具功能
+
+- 📂 **导入结果文件夹**：直接选择标注工具导出的 ZIP 解压后的文件夹
+- 🖼️ **查看带批注图片**：清晰展示每张 marked_ 图片
+- 📋 **查看错误信息**：Badcase 数量、错误原因、文件夹路径等详细信息
+- 📋 **一键复制任务 ID**：点击复制按钮即可复制任务编号到剪贴板
+- 🔍 **图片缩放支持**：适应高度 / 适应宽度两种查看模式
+- ⌨️ **键盘导航**：上下箭头快速切换任务
 
 ## 🚀 在线使用（推荐）
 
-本工具已通过 **GitHub Pages** 部署，无需下载安装，直接用浏览器访问即可：
+两个工具均已通过 **GitHub Pages** 部署，无需下载安装：
 
+### 标注工具
 👉 **[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
 
-> 注意：所有图片和标注数据均在浏览器本地处理，不会上传到任何服务器。
+### 结果查看工具
+👉 **[https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)**
+
+> 注意：所有图片和数据均在浏览器本地处理，不会上传到任何服务器。
 
 ## 快速开始
 
@@ -33,17 +54,18 @@
 
 #### 方式一：在线使用（推荐）
 
-直接访问： **[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
+- **标注工具**： [https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)
+- **结果查看工具**： [https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)
 
-1. 点击页面左上角「选择文件夹」按钮
-2. 选择你的批阅任务文件夹
-3. 即可开始标注
+1. 打开对应工具页面
+2. 点击「选择文件夹」按钮
+3. 选择对应文件夹即可使用
 
 #### 方式二：直接本地打开
 
-1. 下载仓库中的 `annotation-tool.html`
+1. 下载仓库中的 `annotation-tool.html` 或 `result-viewer.html`
 2. 用浏览器直接双击打开该文件
-3. 点击页面左上角「选择文件夹」按钮，选择批阅任务文件夹即可
+3. 点击「选择文件夹」按钮即可
 
 #### 方式三：通过本地 HTTP 服务器访问
 
@@ -160,13 +182,30 @@ Badcase 数量: 2
 是否有勾画痕迹: 是
 ```
 
+### 6. 使用结果查看工具浏览标注结果
+
+1. 将导出的 ZIP 文件解压到本地
+2. 打开 **结果查看工具**（`result-viewer.html`）
+3. 点击「选择文件夹」，选中解压后的**标注结果文件夹**
+4. 工具会自动扫描所有任务子文件夹，展示带批注的图片和错误信息
+5. 左侧任务列表点击切换不同任务，右侧信息面板展示详细信息
+6. 点击任务编号旁的「复制」按钮即可复制任务 ID
+
 ## 快捷键
+
+### 标注工具快捷键
 
 | 快捷键 | 功能 |
 |--------|------|
-| `←` 左箭头 | 上一张图片 |
-| `→` 右箭头 | 下一张图片 |
+| `←` `→` | 上一张 / 下一张图片 |
 | `S` / `Enter` | 保存标注 / 跳过此图 |
+
+### 结果查看工具快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| `↑` `↓` | 上一个 / 下一个任务 |
+| `←` `→` | 上一个 / 下一个任务 |
 
 ## 浏览器兼容性
 
@@ -180,9 +219,12 @@ Badcase 数量: 2
 
 | 文件 | 说明 |
 |------|------|
-| `annotation-tool.html` | 主工具页面，独立可运行 |
-| `test_annotation_tool.py` | Playwright 自动化测试脚本 |
-| `test_data/` | 测试数据（模拟的批阅任务文件夹） |
+| `annotation-tool.html` | **标注工具**主页面，独立可运行 |
+| `result-viewer.html` | **结果查看工具**主页面，独立可运行 |
+| `test_annotation_tool.py` | 标注工具 Playwright 自动化测试脚本（16 项测试） |
+| `test_result_viewer.py` | 结果查看工具 Playwright 自动化测试脚本（10 项测试） |
+| `test_data/` | 标注工具测试数据 |
+| `test_results/` | 结果查看工具测试数据（模拟导出结果） |
 | `annotation-tool-prototype.html` | 早期 UI 原型页面 |
 | `README.md` | 本说明文件 |
 
