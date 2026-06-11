@@ -367,6 +367,44 @@
             line-height: 1.6;
         }
 
+        /* 视图模式 */
+        .view-mode-section {
+            background: #f0f7ff;
+        }
+
+        .zoom-btn {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #667eea;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #667eea;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .zoom-btn:hover {
+            background: #f5f7ff;
+            transform: translateY(-1px);
+        }
+
+        .zoom-btn:active {
+            transform: translateY(0);
+        }
+
+        .zoom-hint {
+            font-size: 11px;
+            color: #889;
+            margin-top: 8px;
+            text-align: center;
+        }
+
         /* 右侧图片区域 */
         .content-area {
             flex: 1;
@@ -409,6 +447,11 @@
             position: relative;
         }
 
+        .canvas-wrapper.fit-width {
+            align-items: flex-start;
+            justify-content: flex-start;
+        }
+
         .image-container {
             position: relative;
             box-shadow: 0 8px 32px rgba(0,0,0,0.15);
@@ -418,11 +461,23 @@
             max-width: 100%;
         }
 
+        .image-container.fit-width {
+            width: 100%;
+            max-width: none;
+            border-radius: 0;
+        }
+
         .image-container img {
             display: block;
             max-width: 100%;
             max-height: calc(100vh - 90px);
             object-fit: contain;
+        }
+
+        .image-container.fit-width img {
+            width: 100%;
+            height: auto;
+            max-height: none;
         }
 
         .drawing-canvas {
@@ -739,6 +794,16 @@
                 <button class="tool-btn clear-btn" onclick="clearCanvas()">🗑️ 清空痕迹</button>
             </div>
 
+            <!-- 视图模式 -->
+            <div class="sidebar-section view-mode-section">
+                <div class="sidebar-title">视图模式</div>
+                <button class="zoom-btn" id="zoomBtn" onclick="toggleZoomMode()">
+                    <span id="zoomIcon">🔍+</span>
+                    <span id="zoomText">放大查看（适应宽度）</span>
+                </button>
+                <div class="zoom-hint">放大后可用滚轮滑动查看纵向内容</div>
+            </div>
+
             <!-- Badcase 数量 -->
             <div class="sidebar-section badcase-section">
                 <div class="sidebar-title">Badcase 数量</div>
@@ -826,6 +891,7 @@
         let currentTool = 'draw';
         let brushColor = '#e74c3c';
         let brushSize = 2;
+        let imageZoomMode = 'fit-height'; // 'fit-height' | 'fit-width'
         let isDrawing = false;
         let annotations = {};    // taskId -> annotation 对象
         let markedCount = 0;     // 已标注数量
@@ -1029,6 +1095,7 @@
             // 加载图片
             img.src = item.imageUrl;
             img.onload = () => {
+                applyZoomMode();
                 initCanvas();
                 restoreAnnotation(item.taskId);
             };
@@ -1047,6 +1114,35 @@
             canvas.height = img.naturalHeight || rect.height;
             canvas.style.width = rect.width + 'px';
             canvas.style.height = rect.height + 'px';
+        }
+
+        function applyZoomMode() {
+            const container = document.getElementById('imageContainer');
+            const wrapper = document.querySelector('.canvas-wrapper');
+            const zoomIcon = document.getElementById('zoomIcon');
+            const zoomText = document.getElementById('zoomText');
+            
+            if (imageZoomMode === 'fit-width') {
+                container.classList.add('fit-width');
+                wrapper.classList.add('fit-width');
+                if (zoomIcon) zoomIcon.textContent = '🔍-';
+                if (zoomText) zoomText.textContent = '缩小查看（适应高度）';
+            } else {
+                container.classList.remove('fit-width');
+                wrapper.classList.remove('fit-width');
+                if (zoomIcon) zoomIcon.textContent = '🔍+';
+                if (zoomText) zoomText.textContent = '放大查看（适应宽度）';
+            }
+        }
+
+        function toggleZoomMode() {
+            imageZoomMode = imageZoomMode === 'fit-height' ? 'fit-width' : 'fit-height';
+            applyZoomMode();
+            // 重新调整 canvas 尺寸并恢复标注
+            if (img.complete && img.naturalWidth) {
+                initCanvas();
+                restoreAnnotation(taskItems[currentIndex]?.taskId);
+            }
         }
 
         // ============ Badcase 数量选择 ============

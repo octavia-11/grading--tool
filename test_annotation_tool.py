@@ -316,8 +316,39 @@ async def run_tests():
             print("  ✓ 蓝色画笔切换正常")
             passed += 1
             
-            # ============ 测试 13: 保存按钮动态文本 ============
-            print("\n[测试 13] 保存按钮动态文本...")
+            # ============ 测试 13: 视图模式切换（放大/缩小）============
+            print("\n[测试 13] 视图模式切换（放大/缩小）...")
+            zoom_btn = page.locator("#zoomBtn")
+            container = page.locator("#imageContainer")
+            wrapper = page.locator(".canvas-wrapper")
+            
+            # 默认应为适应高度模式
+            await expect(container).not_to_have_class(re.compile("fit-width"))
+            await expect(wrapper).not_to_have_class(re.compile("fit-width"))
+            
+            # 点击放大
+            await zoom_btn.click()
+            await asyncio.sleep(0.3)
+            await expect(container).to_have_class(re.compile("fit-width"))
+            await expect(wrapper).to_have_class(re.compile("fit-width"))
+            
+            zoom_text = await page.locator("#zoomText").text_content()
+            assert "缩小" in zoom_text, f"放大后按钮应显示缩小，实际: {zoom_text}"
+            
+            # 验证 JS 状态
+            current_mode = await page.evaluate("() => imageZoomMode")
+            assert current_mode == "fit-width", f"放大后模式应为 fit-width，实际: {current_mode}"
+            
+            # 点击缩小
+            await zoom_btn.click()
+            await asyncio.sleep(0.3)
+            await expect(container).not_to_have_class(re.compile("fit-width"))
+            await expect(wrapper).not_to_have_class(re.compile("fit-width"))
+            print("  ✓ 视图模式切换正常")
+            passed += 1
+            
+            # ============ 测试 14: 保存按钮动态文本 ============
+            print("\n[测试 14] 保存按钮动态文本...")
             # 清空所有选择
             await page.evaluate("() => { resetSidebar(); clearCanvas(); }")
             await asyncio.sleep(0.2)
@@ -332,8 +363,8 @@ async def run_tests():
             print("  ✓ 保存按钮动态文本切换正常")
             passed += 1
             
-            # ============ 测试 14: YAML 解析 ============
-            print("\n[测试 14] YAML 解析函数...")
+            # ============ 测试 15: YAML 解析 ============
+            print("\n[测试 15] YAML 解析函数...")
             try:
                 yaml_text = 'task_ids:\n  - "db45c6d8-04ed-4a71-a7d2-2179957bd9b4"\n  - "second-id-here"'
                 context2 = await browser.new_context(viewport={'width': 800, 'height': 600})
@@ -354,8 +385,8 @@ async def run_tests():
                 print(f"  ✗ YAML 解析测试失败: {e}")
                 failed += 1
             
-            # ============ 测试 15: 报告生成 ============
-            print("\n[测试 15] 报告生成功能...")
+            # ============ 测试 16: 报告生成 ============
+            print("\n[测试 16] 报告生成功能...")
             try:
                 context3 = await browser.new_context(viewport={'width': 800, 'height': 600})
                 page3 = await context3.new_page()
