@@ -3,7 +3,9 @@
 本项目包含两个基于浏览器的本地静态网页工具：
 
 1. **图片批阅标注工具** — 对批阅任务图片进行标注，支持鼠标勾画、选择 Badcase 数量和错误原因，并将结果打包导出
+**[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
 2. **标注结果查看工具** — 查看标注工具导出的结果，浏览带批注的图片和错误信息，并支持复制任务 ID
+**[https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)**
 
 所有数据均在浏览器本地处理，不会上传到任何服务器。
 
