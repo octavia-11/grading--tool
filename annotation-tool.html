@@ -491,35 +491,44 @@
         .thumbnail-bar {
             position: fixed;
             right: 0;
-            top: 50%;
-            transform: translateY(-50%);
+            top: 0;
+            bottom: 0;
+            width: 168px;
             background: white;
-            border-radius: 8px 0 0 8px;
+            border-left: 1px solid #e8e8e8;
             box-shadow: -2px 0 12px rgba(0,0,0,0.08);
             padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            max-height: 70vh;
+            gap: 6px;
+            box-sizing: border-box;
             overflow-y: auto;
+            overflow-x: hidden;
             z-index: 10;
         }
 
+        .thumbnail-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            flex: 1 1 auto;
+            align-content: start;
+        }
+
         .thumbnail-item {
-            width: 56px;
-            height: 56px;
+            width: 100%;
+            aspect-ratio: 1 / 1;
             border: 2px solid #e0e0e0;
-            border-radius: 6px;
+            border-radius: 4px;
             cursor: pointer;
             overflow: hidden;
             position: relative;
-            transition: all 0.2s;
-            flex-shrink: 0;
+            transition: all 0.15s;
             display: flex;
             align-items: center;
             justify-content: center;
             background: #f5f5f5;
-            font-size: 12px;
+            font-size: 11px;
             color: #888;
         }
 
@@ -557,10 +566,11 @@
             margin-top: 8px;
             padding-top: 8px;
             border-top: 1px solid #e8e8e8;
+            flex-shrink: 0;
         }
 
         .thumb-nav-btn {
-            width: 56px;
+            width: 100%;
             padding: 8px 4px;
             border: 1px solid #e0e0e0;
             background: white;
@@ -1055,16 +1065,22 @@
         // ============ 缩略图 ============
         function initThumbnails() {
             const bar = document.getElementById('thumbnailBar');
-            // 只移除缩略图项，保留底部导航按钮
-            bar.querySelectorAll('.thumbnail-item').forEach(el => el.remove());
+            // 重置：移除旧的 grid 与缩略图项，保留底部导航按钮
+            bar.querySelectorAll('.thumbnail-grid').forEach(el => el.remove());
+
+            const grid = document.createElement('div');
+            grid.className = 'thumbnail-grid';
+
             taskItems.forEach((item, i) => {
                 const div = document.createElement('div');
                 div.className = 'thumbnail-item' + (i === 0 ? ' active' : '');
                 if (annotations[item.id]) div.classList.add('marked');
                 div.textContent = i + 1;
                 div.onclick = () => loadImage(i);
-                bar.insertBefore(div, bar.querySelector('.thumb-nav'));
+                grid.appendChild(div);
             });
+
+            bar.insertBefore(grid, bar.querySelector('.thumb-nav'));
         }
 
         function updateThumbnail(index) {
@@ -1076,6 +1092,10 @@
                     el.classList.add('marked');
                 }
             });
+            const active = items[index];
+            if (active && active.scrollIntoView) {
+                active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
         }
 
         // ============ 图片加载 ============
