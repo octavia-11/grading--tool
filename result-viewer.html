@@ -441,6 +441,92 @@
             overflow-y: auto;
         }
 
+        /* 原始报告编辑器 */
+        .report-title-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .report-toolbar {
+            display: flex;
+            gap: 6px;
+        }
+
+        .report-btn {
+            padding: 4px 10px;
+            background: white;
+            border: 1px solid #d0d0d0;
+            color: #666;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            line-height: 1.4;
+        }
+
+        .report-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .report-btn.save-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+
+        .report-btn.save-btn:hover {
+            opacity: 0.9;
+            color: white;
+        }
+
+        .report-btn.cancel-btn:hover {
+            border-color: #e74c3c;
+            color: #e74c3c;
+            background: #fff5f5;
+        }
+
+        .report-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .report-editor {
+            width: 100%;
+            min-height: 220px;
+            padding: 12px;
+            border: 1px solid #667eea;
+            border-radius: 8px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            font-size: 13px;
+            line-height: 1.7;
+            color: #333;
+            resize: vertical;
+            background: #fdfdff;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+            max-height: 400px;
+        }
+
+        .report-editor:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.18);
+        }
+
+        .report-hint {
+            font-size: 11px;
+            color: #999;
+            margin-top: 6px;
+            line-height: 1.5;
+        }
+
+        .report-hint .warn {
+            color: #e67e22;
+        }
+
         .reason-tags {
             display: flex;
             flex-wrap: wrap;
@@ -734,6 +820,7 @@
                 if (errorInfoFile) {
                     const text = await readFileAsText(errorInfoFile);
                     errorInfo = parseErrorInfo(text);
+                    errorInfo._raw = text;
                 }
 
                 // 读取 task_id.txt（如果 error_info 中没有 taskId）
@@ -948,10 +1035,130 @@
                 </div>
                 
                 <div class="info-section">
-                    <div class="info-section-title">原始报告</div>
-                    <div class="info-text-block" id="rawReport">${item.errorInfo._raw || '无详细报告'}</div>
+                    <div class="info-section-title report-title-bar">
+                        <span>原始报告</span>
+                        <div class="report-toolbar">
+                            <button class="report-btn" id="editReportBtn" onclick="enterEditMode()">✏️ 编辑</button>
+                            <button class="report-btn save-btn" id="saveReportBtn" onclick="saveReport()" style="display:none;">💾 保存</button>
+                            <button class="report-btn cancel-btn" id="cancelReportBtn" onclick="cancelEditMode()" style="display:none;">取消</button>
+                        </div>
+                    </div>
+                    <div class="info-text-block" id="rawReportView">${escapeHtml(item.errorInfo._raw) || '<span style="color:#999;">无详细报告（点击「编辑」可创建）</span>'}</div>
+                    <textarea class="report-editor" id="rawReportEditor" style="display:none;" placeholder="在此编辑原始报告内容..."></textarea>
+                    <div class="report-hint" id="reportHint" style="display:none;">
+                        保存后将：<span class="warn">①</span> 更新当前会话内的解析字段（Badcase 数量、错误原因等）；
+                        <span class="warn">②</span> 自动下载新的 <code>error_info.txt</code>，可用其替换原文件。
+                    </div>
                 </div>
             `;
+        }
+
+        // ============ 原始报告编辑 ============
+        function enterEditMode() {
+            const item = resultItems[currentIndex];
+            const view = document.getElementById('rawReportView');
+            const editor = document.getElementById('rawReportEditor');
+            const editBtn = document.getElementById('editReportBtn');
+            const saveBtn = document.getElementById('saveReportBtn');
+            const cancelBtn = document.getElementById('cancelReportBtn');
+            const hint = document.getElementById('reportHint');
+
+            editor.value = item.errorInfo._raw || '';
+            view.style.display = 'none';
+            editor.style.display = 'block';
+            editBtn.style.display = 'none';
+            saveBtn.style.display = 'inline-block';
+            cancelBtn.style.display = 'inline-block';
+            hint.style.display = 'block';
+            editor.focus();
+            // 将光标移到末尾
+            const len = editor.value.length;
+            editor.setSelectionRange(len, len);
+        }
+
+        function cancelEditMode() {
+            renderInfoPanel(resultItems[currentIndex]);
+        }
+
+        async function saveReport() {
+            const editor = document.getElementById('rawReportEditor');
+            const newText = editor.value;
+            const item = resultItems[currentIndex];
+
+            // 重新解析以更新 badcaseCount / reasons 等字段
+            const newInfo = parseErrorInfo(newText);
+            newInfo._raw = newText;
+
+            // 文本里没解析出来的字段回退到旧值，避免信息丢失
+            if (!newInfo.taskId) newInfo.taskId = item.taskId;
+            if (!newInfo.folderPath) newInfo.folderPath = item.errorInfo.folderPath;
+            if (!newInfo.imageName) newInfo.imageName = item.errorInfo.imageName || item.imageName;
+            if (newInfo.timestamp === undefined) newInfo.timestamp = item.errorInfo.timestamp;
+            if (newInfo.badcaseCount === undefined) newInfo.badcaseCount = item.errorInfo.badcaseCount;
+            if (newInfo.hasDrawing === undefined) newInfo.hasDrawing = item.errorInfo.hasDrawing;
+
+            item.errorInfo = newInfo;
+
+            // 重新渲染当前面板（会恢复成查看模式）
+            renderInfoPanel(item);
+            // 同步刷新左侧任务列表和顶部统计
+            renderTaskList();
+            updateTaskListActive(currentIndex);
+            updateTotalBadcase();
+
+            // 写回文件：优先 File System Access API，回退到下载
+            const fileSaved = await writeErrorInfoFile(newText, item);
+            if (fileSaved === 'file') {
+                showToast('✓ 报告已保存并写入文件');
+            } else if (fileSaved === 'download') {
+                showToast('✓ 报告已保存，已下载新文件替换原 error_info.txt');
+            } else {
+                showToast('✓ 报告已在当前会话内更新（未写入磁盘）');
+            }
+        }
+
+        async function writeErrorInfoFile(text, item) {
+            // 优先使用 File System Access API 直接覆盖原文件
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: 'error_info.txt',
+                        types: [{
+                            description: '文本文件',
+                            accept: { 'text/plain': ['.txt'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(text);
+                    await writable.close();
+                    return 'file';
+                } catch (err) {
+                    if (err && err.name === 'AbortError') return 'cancelled';
+                    console.warn('showSaveFilePicker 失败，回退到下载:', err);
+                }
+            }
+            // 回退：触发浏览器下载
+            downloadErrorInfo(text, item);
+            return 'download';
+        }
+
+        function downloadErrorInfo(text, item) {
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'error_info.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 200);
+        }
+
+        function escapeHtml(text) {
+            if (text === undefined || text === null || text === '') return '';
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
         }
 
         // ============ 复制任务ID ============
