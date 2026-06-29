@@ -351,6 +351,32 @@ async def run_tests():
                 await page.keyboard.press("z")
             await asyncio.sleep(0.2)
 
+            # 测试 14.6: 缩略图第一行未被 header 盖住
+            print("\n[测试 14.6] 缩略图第一行未被 header 遮挡...")
+            occlusion = await page.evaluate("""
+                () => {
+                    const hdr = document.querySelector('.header');
+                    const firstThumb = document.querySelector('.thumbnail-item');
+                    if (!firstThumb) return {skip: true};
+                    const hRect = hdr.getBoundingClientRect();
+                    const tRect = firstThumb.getBoundingClientRect();
+                    return {
+                        hdrBottom: hRect.bottom,
+                        thumbTop: tRect.top,
+                        visible: tRect.top >= hRect.bottom - 1
+                    };
+                }
+            """)
+            if occlusion.get("skip"):
+                print("  ⚠ 无缩略图，跳过")
+            else:
+                assert occlusion["visible"], \
+                    f"缩略图第一行被 header 盖住：thumb.top={occlusion['thumbTop']}, header.bottom={occlusion['hdrBottom']}"
+                print(f"  ✓ 缩略图第一行 top={occlusion['thumbTop']:.0f} ≥ header.bottom={occlusion['hdrBottom']:.0f}")
+            passed += 1
+
+
+
 
             print("\n[测试 15] 序列化为 v2 schema...")
             v2_obj = await page.evaluate("""

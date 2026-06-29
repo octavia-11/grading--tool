@@ -503,10 +503,14 @@
             cursor: crosshair;
         }
 
+        :root {
+            --header-height: 65px;
+        }
+
         .thumbnail-bar {
             position: fixed;
             right: 0;
-            top: 0;
+            top: var(--header-height);
             bottom: 0;
             width: 168px;
             background: white;
