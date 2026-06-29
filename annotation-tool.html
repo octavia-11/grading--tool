@@ -6,6 +6,7 @@
     <title>图片批阅标注工具</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="taxonomy.js"></script>
     <style>
         * {
             margin: 0;
@@ -22,7 +23,6 @@
             flex-direction: column;
         }
 
-        /* 顶部导航栏 */
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -32,6 +32,8 @@
             justify-content: space-between;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             flex-shrink: 0;
+            position: relative;
+            z-index: 100;
         }
 
         .header h1 {
@@ -86,16 +88,14 @@
             opacity: 0.9;
         }
 
-        /* 主体区域 */
         .main-container {
             display: flex;
             flex: 1;
             overflow: hidden;
         }
 
-        /* 左侧标记栏 */
         .sidebar {
-            width: 300px;
+            width: 320px;
             background: white;
             border-right: 1px solid #e8e8e8;
             display: flex;
@@ -105,7 +105,7 @@
         }
 
         .sidebar-section {
-            padding: 20px;
+            padding: 16px 20px;
             border-bottom: 1px solid #f0f0f0;
         }
 
@@ -113,7 +113,7 @@
             font-size: 14px;
             font-weight: 600;
             color: #333;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -127,169 +127,248 @@
             border-radius: 2px;
         }
 
-        /* 绘制工具 */
-        .drawing-tools {
-            background: #f8faff;
-        }
-
-        .tool-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-
-        .tool-row:last-child {
-            margin-bottom: 0;
-        }
-
-        .color-options {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-
-        .color-label {
-            font-size: 12px;
-            color: #888;
-            margin-right: 4px;
-        }
-
-        .color-dot {
-            width: 26px;
-            height: 26px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 3px solid transparent;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s;
-        }
-
-        .color-dot:hover {
-            transform: scale(1.1);
-        }
-
-        .color-dot.active {
-            border-color: #333;
-            transform: scale(1.1);
-        }
-
-        .color-dot.red {
-            background: #e74c3c;
-        }
-
-        .color-dot.blue {
-            background: #3498db;
-        }
-
-        .tool-btn.clear-btn {
-            width: 100%;
-            padding: 8px;
-            color: #e74c3c;
-            border-color: #f5c6cb;
-            background: #fff5f5;
-        }
-
-        .tool-btn.clear-btn:hover {
-            background: #ffe0e0;
-            border-color: #e74c3c;
-        }
-
-        /* Badcase 数量 */
-        .badcase-section {
+        .error-type-section {
             background: #fafbfc;
         }
 
-        .badcase-buttons {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .badcase-btn {
-            flex: 1;
-            padding: 10px;
-            border: 2px solid #e0e0e0;
-            background: white;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            color: #555;
-            transition: all 0.2s;
-        }
-
-        .badcase-btn:hover {
-            border-color: #667eea;
-            color: #667eea;
-        }
-
-        .badcase-btn.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-color: transparent;
-            color: white;
-        }
-
-        .badcase-input-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .badcase-input {
-            flex: 1;
-            padding: 8px 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .badcase-input:focus {
-            border-color: #667eea;
-        }
-
-        .badcase-input-label {
-            font-size: 13px;
-            color: #888;
-            white-space: nowrap;
-        }
-
-        /* 错误原因分类 */
-        .reason-grid {
+        .error-type-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            gap: 8px;
         }
 
-        .reason-btn {
-            padding: 14px 10px;
+        .error-type-btn {
+            padding: 10px 8px;
             border: 2px solid #e0e0e0;
             background: white;
-            border-radius: 10px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
             color: #555;
             transition: all 0.2s;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
 
-        .reason-btn:hover {
+        .error-type-btn:hover {
             border-color: #667eea;
             color: #667eea;
             transform: translateY(-1px);
         }
 
-        .reason-btn.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-color: transparent;
+        .error-type-btn.active {
             color: white;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            border-color: transparent;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
 
-        /* 任务信息 */
+        .error-type-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .subtype-row {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .subtype-btn {
+            padding: 4px 10px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+            transition: all 0.15s;
+        }
+
+        .subtype-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .subtype-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        .subtype-btn.none-btn {
+            color: #aaa;
+            font-style: italic;
+        }
+
+        .drawing-hint {
+            margin-top: 10px;
+            padding: 8px 10px;
+            background: #fff8e1;
+            border-left: 3px solid #ffa000;
+            font-size: 12px;
+            color: #5d4037;
+            border-radius: 4px;
+            line-height: 1.5;
+        }
+
+        .drawing-hint.idle {
+            background: #f0f0f0;
+            border-left-color: #bdbdbd;
+            color: #666;
+        }
+
+        .error-list-section {
+            background: #fafbfc;
+            min-height: 120px;
+            flex: 1 1 auto;
+        }
+
+        .error-list-empty {
+            font-size: 12px;
+            color: #aaa;
+            text-align: center;
+            padding: 24px 12px;
+            font-style: italic;
+        }
+
+        .error-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .error-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: white;
+            font-size: 12px;
+        }
+
+        .error-item-index {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        .error-item-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .error-item-type {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 2px;
+        }
+
+        .error-item-comment {
+            color: #666;
+            font-size: 11px;
+            line-height: 1.4;
+            word-break: break-all;
+        }
+
+        .error-item-comment-input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            font-size: 11px;
+            color: #666;
+            outline: none;
+            padding: 0;
+            font-family: inherit;
+            resize: none;
+            min-height: 14px;
+        }
+
+        .error-item-comment-input:focus {
+            background: #f8f9ff;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .error-item-bbox {
+            font-size: 10px;
+            color: #999;
+            font-family: monospace;
+            margin-top: 2px;
+        }
+
+        .error-item-delete {
+            width: 22px;
+            height: 22px;
+            border: none;
+            background: transparent;
+            color: #999;
+            cursor: pointer;
+            font-size: 14px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .error-item-delete:hover {
+            background: #ffebee;
+            color: #e74c3c;
+        }
+
+        .error-item.selected {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+
+        .view-mode-section {
+            background: #f0f7ff;
+        }
+
+        .zoom-btn {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #667eea;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #667eea;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .zoom-btn:hover {
+            background: #f5f7ff;
+            transform: translateY(-1px);
+        }
+
+        .zoom-hint {
+            font-size: 11px;
+            color: #889;
+            margin-top: 8px;
+            text-align: center;
+        }
+
         .task-info {
             background: #f8f9ff;
         }
@@ -297,8 +376,8 @@
         .task-info-item {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            font-size: 13px;
+            padding: 6px 0;
+            font-size: 12px;
             border-bottom: 1px dashed #e0e0e0;
         }
 
@@ -313,15 +392,14 @@
         .task-info-value {
             color: #333;
             font-weight: 500;
-            max-width: 160px;
+            max-width: 180px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 11px;
         }
 
-        /* 操作按钮 */
         .action-section {
             margin-top: auto;
             border-bottom: none;
@@ -355,57 +433,14 @@
             box-shadow: 0 4px 12px rgba(149, 165, 166, 0.3);
         }
 
-        .save-btn.skip-mode:hover {
-            box-shadow: 0 6px 16px rgba(149, 165, 166, 0.4);
-        }
-
         .shortcut-hint {
-            font-size: 12px;
+            font-size: 11px;
             color: #aaa;
             margin-top: 10px;
             text-align: center;
             line-height: 1.6;
         }
 
-        /* 视图模式 */
-        .view-mode-section {
-            background: #f0f7ff;
-        }
-
-        .zoom-btn {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1px solid #667eea;
-            background: white;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            color: #667eea;
-            font-weight: 500;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .zoom-btn:hover {
-            background: #f5f7ff;
-            transform: translateY(-1px);
-        }
-
-        .zoom-btn:active {
-            transform: translateY(0);
-        }
-
-        .zoom-hint {
-            font-size: 11px;
-            color: #889;
-            margin-top: 8px;
-            text-align: center;
-        }
-
-        /* 右侧图片区域 */
         .content-area {
             flex: 1;
             display: flex;
@@ -414,29 +449,6 @@
             position: relative;
         }
 
-        .tool-btn {
-            padding: 6px 14px;
-            border: 1px solid #e0e0e0;
-            background: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            color: #555;
-            transition: all 0.2s;
-        }
-
-        .tool-btn:hover {
-            border-color: #667eea;
-            color: #667eea;
-        }
-
-        .tool-btn.active {
-            background: #667eea;
-            border-color: #667eea;
-            color: white;
-        }
-
-        /* 图片画布区域 */
         .canvas-wrapper {
             flex: 1;
             display: flex;
@@ -487,7 +499,6 @@
             cursor: crosshair;
         }
 
-        /* 缩略图侧边栏 */
         .thumbnail-bar {
             position: fixed;
             right: 0;
@@ -512,7 +523,6 @@
             transform: translateX(168px);
         }
 
-        /* 缩略图栏收起/展开按钮 */
         .sidebar-toggle {
             position: fixed;
             right: 168px;
@@ -595,13 +605,10 @@
             border-radius: 50%;
         }
 
-        .thumbnail-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+        .thumbnail-item.skipped::after {
+            background: #95a5a6;
         }
 
-        /* 缩略图栏底部导航按钮 */
         .thumb-nav {
             display: flex;
             flex-direction: column;
@@ -635,7 +642,6 @@
             cursor: not-allowed;
         }
 
-        /* 提示信息 */
         .toast {
             position: fixed;
             bottom: 30px;
@@ -656,7 +662,6 @@
             opacity: 1;
         }
 
-        /* 空状态 */
         .empty-state {
             display: flex;
             flex-direction: column;
@@ -696,57 +701,10 @@
             cursor: pointer;
         }
 
-        /* 线条粗细选择 */
-        .brush-size {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-left: 10px;
-        }
-
-        .brush-size-label {
-            font-size: 12px;
-            color: #888;
-        }
-
-        .size-options {
-            display: flex;
-            gap: 4px;
-        }
-
-        .size-dot {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 2px solid #e0e0e0;
-            background: white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-        }
-
-        .size-dot:hover {
-            border-color: #667eea;
-        }
-
-        .size-dot.active {
-            border-color: #667eea;
-            background: #f0f2ff;
-        }
-
-        .size-dot-inner {
-            background: #e74c3c;
-            border-radius: 50%;
-        }
-
-        /* 隐藏的文件输入 */
         #folderInput {
             display: none;
         }
 
-        /* 加载动画 */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -784,7 +742,6 @@
             font-size: 14px;
         }
 
-        /* 标注统计 */
         .stats-badge {
             background: rgba(255,255,255,0.2);
             padding: 4px 12px;
@@ -796,7 +753,6 @@
 <body>
     <input type="file" id="folderInput" webkitdirectory directory multiple>
 
-    <!-- 顶部导航 -->
     <div class="header">
         <h1>📋 图片批阅标注工具</h1>
         <div class="header-controls">
@@ -807,9 +763,7 @@
         </div>
     </div>
 
-    <!-- 主体区域 -->
     <div class="main-container" id="mainContainer">
-        <!-- 空状态 -->
         <div class="empty-state" id="emptyState">
             <div class="empty-state-icon">📁</div>
             <h2>欢迎使用图片批阅标注工具</h2>
@@ -817,37 +771,23 @@
             <button class="folder-select-btn" onclick="selectFolder()">选择批阅任务文件夹</button>
         </div>
 
-        <!-- 工作区 -->
         <div class="sidebar" id="sidebar" style="display:none;">
-            <!-- 绘制工具 -->
-            <div class="sidebar-section drawing-tools">
-                <div class="sidebar-title">绘制工具</div>
-                <div class="tool-row">
-                    <span class="color-label">颜色:</span>
-                    <div class="color-options">
-                        <div class="color-dot red active" data-color="#e74c3c" onclick="setBrushColor('#e74c3c', this)" title="红色画笔"></div>
-                        <div class="color-dot blue" data-color="#3498db" onclick="setBrushColor('#3498db', this)" title="蓝色画笔"></div>
-                    </div>
-                    <button class="tool-btn" id="eraseTool" onclick="setTool('erase')">🧹 橡皮</button>
+            <div class="sidebar-section error-type-section">
+                <div class="sidebar-title">错误类型（先选类型，再画框）</div>
+                <div class="error-type-grid" id="errorTypeGrid"></div>
+                <div class="subtype-row" id="subtypeRow"></div>
+                <div class="drawing-hint idle" id="drawingHint">
+                    请先在上方选择错误类型，然后在图片上拖动鼠标画框
                 </div>
-                <div class="tool-row">
-                    <span class="brush-size-label">粗细:</span>
-                    <div class="size-options">
-                        <div class="size-dot active" data-size="2" onclick="setBrushSize(2, this)">
-                            <div class="size-dot-inner" style="width:4px;height:4px;"></div>
-                        </div>
-                        <div class="size-dot" data-size="4" onclick="setBrushSize(4, this)">
-                            <div class="size-dot-inner" style="width:8px;height:8px;"></div>
-                        </div>
-                        <div class="size-dot" data-size="6" onclick="setBrushSize(6, this)">
-                            <div class="size-dot-inner" style="width:12px;height:12px;"></div>
-                        </div>
-                    </div>
-                </div>
-                <button class="tool-btn clear-btn" onclick="clearCanvas()">🗑️ 清空痕迹</button>
             </div>
 
-            <!-- 视图模式 -->
+            <div class="sidebar-section error-list-section">
+                <div class="sidebar-title">本图错误列表（Badcase 自动 = 数量）</div>
+                <div id="errorListContainer">
+                    <div class="error-list-empty">暂无错误。画框后会出现在这里。</div>
+                </div>
+            </div>
+
             <div class="sidebar-section view-mode-section">
                 <div class="sidebar-title">视图模式</div>
                 <button class="zoom-btn" id="zoomBtn" onclick="toggleZoomMode()">
@@ -857,31 +797,6 @@
                 <div class="zoom-hint">放大后可用滚轮滑动查看纵向内容</div>
             </div>
 
-            <!-- Badcase 数量 -->
-            <div class="sidebar-section badcase-section">
-                <div class="sidebar-title">Badcase 数量</div>
-                <div class="badcase-buttons">
-                    <button class="badcase-btn" data-value="1" onclick="selectBadcase(this)">1</button>
-                    <button class="badcase-btn" data-value="2" onclick="selectBadcase(this)">2</button>
-                </div>
-                <div class="badcase-input-wrapper">
-                    <input type="number" class="badcase-input" id="badcaseInput" placeholder="输入数量" min="0" oninput="onBadcaseInput(this)">
-                    <span class="badcase-input-label">个</span>
-                </div>
-            </div>
-
-            <!-- 错误原因分类 -->
-            <div class="sidebar-section">
-                <div class="sidebar-title">错误原因分类（可多选）</div>
-                <div class="reason-grid">
-                    <button class="reason-btn" data-reason="切题" onclick="toggleReason(this)">切题</button>
-                    <button class="reason-btn" data-reason="OCR" onclick="toggleReason(this)">OCR</button>
-                    <button class="reason-btn" data-reason="解题" onclick="toggleReason(this)">解题</button>
-                    <button class="reason-btn" data-reason="判题" onclick="toggleReason(this)">判题</button>
-                </div>
-            </div>
-
-            <!-- 任务信息 -->
             <div class="sidebar-section task-info">
                 <div class="sidebar-title">当前任务信息</div>
                 <div class="task-info-item">
@@ -898,17 +813,16 @@
                 </div>
             </div>
 
-            <!-- 操作按钮 -->
             <div class="sidebar-section action-section">
-                <button class="save-btn" id="saveBtn" onclick="saveAnnotation()">保存标注 / 跳过此图</button>
+                <button class="save-btn skip-mode" id="saveBtn" onclick="saveAnnotation()">→ 跳过此图</button>
                 <div class="shortcut-hint">
                     ← → 切换图片<br>
-                    S / Enter 保存或跳过
+                    S / Enter 保存或跳过<br>
+                    Z 撤销最后一个框 / Esc 取消当前框
                 </div>
             </div>
         </div>
 
-        <!-- 右侧图片区域 -->
         <div class="content-area" id="contentArea" style="display:none;">
             <div class="canvas-wrapper">
                 <div class="image-container" id="imageContainer">
@@ -919,22 +833,17 @@
         </div>
     </div>
 
-    <!-- 缩略图栏 -->
     <div class="thumbnail-bar" id="thumbnailBar" style="display:none;">
-        <!-- 动态生成 -->
         <div class="thumb-nav">
             <button class="thumb-nav-btn" onclick="prevImage()" id="prevBtn">↑ 上一张</button>
             <button class="thumb-nav-btn" onclick="nextImage()" id="nextBtn">↓ 下一张</button>
         </div>
     </div>
 
-    <!-- 缩略图栏收起/展开按钮 -->
     <button class="sidebar-toggle" id="sidebarToggle" title="收起/展开缩略图" onclick="toggleSidebar()">›</button>
 
-    <!-- 提示信息 -->
     <div class="toast" id="toast"></div>
 
-    <!-- 加载动画 -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
         <div class="loading-text" id="loadingText">正在加载...</div>
@@ -942,33 +851,73 @@
 
     <script>
         // ============ 全局状态 ============
-        let taskItems = [];      // 所有任务项 [{taskId, folderPath, imageFile, yamlFile, imageUrl}]
-        let currentIndex = 0;    // 当前索引
-        let currentTool = 'draw';
-        let brushColor = '#e74c3c';
-        let brushSize = 2;
-        let imageZoomMode = 'fit-height'; // 'fit-height' | 'fit-width'
-        let isDrawing = false;
-        let annotations = {};    // taskId -> annotation 对象
-        let markedCount = 0;     // 已标注数量
+        const ANNOTATOR_ID = 'default';
+        const SCHEMA_VERSION = '1.0';
+        const TOOL_VERSION = '2.0.0';
+        const STORAGE_PREFIX = 'gradingAnnotation:';
+        const STORAGE_DEBOUNCE_MS = 400;
 
-        // ============ DOM 元素 ============
+        let taskItems = [];
+        let currentIndex = 0;
+        let imageZoomMode = 'fit-height';
+        let annotations = {};        // itemId -> v2 annotation 对象
+        let currentErrors = [];      // 当前图片的 errors 数组（编辑中）
+        let currentErrorType = null; // 选中的 error_type（绘制前预选）
+        let currentSubtype = null;
+        let selectedErrorId = null;
+        let isDrawingBBox = false;
+        let bboxStart = null;
+        let bboxCurrent = null;
+        let sessionId = 'sess_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        let sessionStartAt = new Date().toISOString();
+        let imageLoadTime = {};      // itemId -> timestamp(ms) 进入该图时记录
+        let taxonomy = null;
+        let storageTimer = null;
+
+        // ============ DOM ============
         const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
         const img = document.getElementById('previewImage');
         const folderInput = document.getElementById('folderInput');
 
-        // ============ 文件夹选择 ============
-        function selectFolder() {
-            folderInput.click();
+        // ============ Taxonomy 加载 ============
+        function loadTaxonomy() {
+            if (window.TAXONOMY && Array.isArray(window.TAXONOMY.categories)) {
+                taxonomy = window.TAXONOMY;
+                return;
+            }
+            // 内嵌兜底，与 taxonomy.js 保持一致
+            taxonomy = {
+                version: '1.0-fallback',
+                categories: [
+                    { id: 'topic', label: '切题', color: '#e74c3c', subtypes: [
+                        { id: 'off_topic', label: '答非所问' }, { id: 'incomplete', label: '未覆盖要点' } ] },
+                    { id: 'ocr', label: 'OCR', color: '#3498db', subtypes: [
+                        { id: 'char_wrong', label: '单字识别错' }, { id: 'char_missing', label: '漏字' },
+                        { id: 'formula', label: '公式错' }, { id: 'format', label: '格式/标点' } ] },
+                    { id: 'solution', label: '解题', color: '#f39c12', subtypes: [
+                        { id: 'logic', label: '逻辑错' }, { id: 'calc', label: '计算错' },
+                        { id: 'formula', label: '公式错' }, { id: 'incomplete', label: '步骤缺失' } ] },
+                    { id: 'judgment', label: '判题', color: '#9b59b6', subtypes: [
+                        { id: 'wrong_conclusion', label: '对错结论错' },
+                        { id: 'score_wrong', label: '分数错' }, { id: 'overlook', label: '漏判' } ] }
+                ],
+                severity_levels: [1, 2, 3]
+            };
+            showToast('⚠️ taxonomy.js 加载失败，使用内置分类');
         }
+
+        function findCategory(typeId) {
+            return taxonomy.categories.find(c => c.id === typeId);
+        }
+
+        // ============ 文件夹选择 ============
+        function selectFolder() { folderInput.click(); }
 
         folderInput.addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
-
             showLoading('正在扫描文件夹...');
-
             try {
                 await parseFolder(files);
                 if (taskItems.length === 0) {
@@ -976,7 +925,6 @@
                     hideLoading();
                     return;
                 }
-
                 initUI();
                 initThumbnails();
                 loadImage(0);
@@ -988,58 +936,38 @@
                 showToast('加载失败: ' + err.message);
                 hideLoading();
             }
-
-            // 清空 input 以便重复选择同一文件夹
             folderInput.value = '';
         });
 
         // ============ 解析文件夹 ============
         async function parseFolder(files) {
             taskItems = [];
-
-            // 按父目录分组
-            // 支持多种文件夹结构：
-            // 结构A：根/子文件夹/序号文件夹/文件
-            // 结构B：根/学生文件夹/文件
             const dirMap = {};
             for (const file of files) {
                 const parts = file.webkitRelativePath.split('/');
-                // 至少需要：根文件夹 / 某目录 / 文件
                 if (parts.length < 3) continue;
-
-                // 父目录路径 = 根文件夹/.../直接父目录
                 const parentParts = parts.slice(1, -1);
                 if (parentParts.length === 0) continue;
-
                 const dirKey = parentParts.join('/');
-                if (!dirMap[dirKey]) {
-                    dirMap[dirKey] = { files: [], path: dirKey };
-                }
+                if (!dirMap[dirKey]) dirMap[dirKey] = { files: [], path: dirKey };
                 dirMap[dirKey].files.push(file);
             }
 
-            // 处理每个目录
             for (const key in dirMap) {
                 const dir = dirMap[key];
                 const yamlFile = dir.files.find(f => f.name.endsWith('.yaml') || f.name.endsWith('.yml'));
                 const imageFiles = dir.files.filter(f => isImageFile(f.name));
-
                 if (!yamlFile || imageFiles.length === 0) continue;
 
-                // 读取 yaml
                 const yamlText = await readFileAsText(yamlFile);
                 const taskIds = parseYamlTaskIds(yamlText);
                 if (!taskIds || taskIds.length === 0) continue;
 
-                // 一个 task_id 可能对应多张图片，为每张图片创建一个任务项
                 taskIds.forEach((taskId, taskIdx) => {
                     imageFiles.forEach((imageFile, imgIdx) => {
-                        // 当只有一个 task_id 和一张图片时，id 就是 taskId
-                        // 否则生成唯一 id，避免 annotations 冲突
                         const uniqueId = taskIds.length === 1 && imageFiles.length === 1
                             ? taskId
                             : `${taskId}__img_${imgIdx}`;
-
                         taskItems.push({
                             id: uniqueId,
                             taskId,
@@ -1047,13 +975,13 @@
                             imageFile,
                             yamlFile,
                             imageUrl: URL.createObjectURL(imageFile),
-                            imageName: imageFile.name
+                            imageName: imageFile.name,
+                            metadata: parseYamlMetadata(yamlText)
                         });
                     });
                 });
             }
 
-            // 按文件夹路径和图片名排序
             taskItems.sort((a, b) => {
                 if (a.folderPath !== b.folderPath) return a.folderPath.localeCompare(b.folderPath);
                 return a.imageName.localeCompare(b.imageName);
@@ -1075,27 +1003,33 @@
         }
 
         function parseYamlTaskIds(text) {
-            // 简单解析 task_ids:
-            //   - "uuid"
             const lines = text.split('\n');
             const ids = [];
             let inTaskIds = false;
             for (const line of lines) {
                 const trimmed = line.trim();
-                if (trimmed.startsWith('task_ids:')) {
-                    inTaskIds = true;
-                    continue;
-                }
+                if (trimmed.startsWith('task_ids:')) { inTaskIds = true; continue; }
                 if (inTaskIds) {
                     const match = trimmed.match(/^-\s*"?([^"]+)"?$/);
-                    if (match) {
-                        ids.push(match[1]);
-                    } else if (trimmed && !trimmed.startsWith('-')) {
-                        break;
-                    }
+                    if (match) { ids.push(match[1]); }
+                    else if (trimmed && !trimmed.startsWith('-')) { break; }
                 }
             }
             return ids;
+        }
+
+        function parseYamlMetadata(text) {
+            // 透传 task_ids；其他字段简略保留（行内 key: value 形式）
+            const meta = { task_ids: parseYamlTaskIds(text) };
+            for (const line of text.split('\n')) {
+                const m = line.match(/^\s*([a-zA-Z_][\w]*)\s*:\s*(.+?)\s*$/);
+                if (m && m[1] !== 'task_ids') {
+                    let v = m[2].replace(/^"(.*)"$/, '$1');
+                    if (!isNaN(Number(v)) && v.trim() !== '') v = Number(v);
+                    meta[m[1]] = v;
+                }
+            }
+            return meta;
         }
 
         // ============ UI 初始化 ============
@@ -1107,9 +1041,9 @@
             document.getElementById('sidebarToggle').classList.add('visible');
             document.getElementById('exportBtn').disabled = false;
             document.getElementById('statsBadge').style.display = 'inline';
+            renderTaxonomySelector();
         }
 
-        // ============ 收起/展开缩略图栏 ============
         function toggleSidebar() {
             const bar = document.getElementById('thumbnailBar');
             const toggle = document.getElementById('sidebarToggle');
@@ -1119,36 +1053,108 @@
             toggle.title = collapsed ? '展开缩略图' : '收起缩略图';
         }
 
+        // ============ Taxonomy 渲染 ============
+        function renderTaxonomySelector() {
+            const grid = document.getElementById('errorTypeGrid');
+            const subtypeRow = document.getElementById('subtypeRow');
+            grid.innerHTML = '';
+            subtypeRow.innerHTML = '';
+
+            taxonomy.categories.forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = 'error-type-btn';
+                btn.style.color = cat.color;
+                btn.dataset.typeId = cat.id;
+                btn.innerHTML = `<span class="error-type-dot"></span>${cat.label}`;
+                btn.onclick = () => selectErrorType(cat.id);
+                if (currentErrorType === cat.id) btn.classList.add('active');
+                grid.appendChild(btn);
+            });
+
+            const activeCat = currentErrorType ? findCategory(currentErrorType) : null;
+            if (activeCat && activeCat.subtypes && activeCat.subtypes.length > 0) {
+                const noneBtn = document.createElement('button');
+                noneBtn.className = 'subtype-btn none-btn' + (currentSubtype === null ? ' active' : '');
+                noneBtn.textContent = '不选子类';
+                noneBtn.onclick = () => selectSubtype(null);
+                subtypeRow.appendChild(noneBtn);
+
+                activeCat.subtypes.forEach(st => {
+                    const btn = document.createElement('button');
+                    btn.className = 'subtype-btn' + (currentSubtype === st.id ? ' active' : '');
+                    btn.textContent = st.label;
+                    btn.onclick = () => selectSubtype(st.id);
+                    subtypeRow.appendChild(btn);
+                });
+            }
+        }
+
+        function selectErrorType(typeId) {
+            currentErrorType = typeId;
+            if (currentSubtype !== null) {
+                const cat = findCategory(typeId);
+                if (!cat || !cat.subtypes.find(s => s.id === currentSubtype)) {
+                    currentSubtype = null;
+                }
+            }
+            renderTaxonomySelector();
+            updateDrawingHint();
+        }
+
+        function selectSubtype(subId) {
+            currentSubtype = subId;
+            renderTaxonomySelector();
+            updateDrawingHint();
+        }
+
+        function updateDrawingHint() {
+            const hint = document.getElementById('drawingHint');
+            if (!currentErrorType) {
+                hint.className = 'drawing-hint idle';
+                hint.textContent = '请先在上方选择错误类型，然后在图片上拖动鼠标画框';
+            } else {
+                const cat = findCategory(currentErrorType);
+                const subtypeLabel = currentSubtype
+                    ? cat.subtypes.find(s => s.id === currentSubtype)?.label
+                    : null;
+                hint.className = 'drawing-hint';
+                hint.textContent = `已选「${cat.label}${subtypeLabel ? ' · ' + subtypeLabel : ''}」。在图片上拖动画框，松开提交。`;
+            }
+        }
+
         // ============ 缩略图 ============
         function initThumbnails() {
             const bar = document.getElementById('thumbnailBar');
-            // 重置：移除旧的 grid 与缩略图项，保留底部导航按钮
             bar.querySelectorAll('.thumbnail-grid').forEach(el => el.remove());
-
             const grid = document.createElement('div');
             grid.className = 'thumbnail-grid';
-
             taskItems.forEach((item, i) => {
                 const div = document.createElement('div');
                 div.className = 'thumbnail-item' + (i === 0 ? ' active' : '');
-                if (annotations[item.id]) div.classList.add('marked');
                 div.textContent = i + 1;
                 div.onclick = () => loadImage(i);
                 grid.appendChild(div);
             });
-
             bar.insertBefore(grid, bar.querySelector('.thumb-nav'));
+            refreshThumbnailsFromAnnotations();
+        }
+
+        function refreshThumbnailsFromAnnotations() {
+            const items = document.querySelectorAll('.thumbnail-item');
+            items.forEach((el, i) => {
+                el.classList.remove('marked', 'skipped');
+                const ann = annotations[taskItems[i]?.id];
+                if (ann) {
+                    if (ann.annotation.status === 'skipped') el.classList.add('skipped');
+                    else if (ann.annotation.status === 'annotated') el.classList.add('marked');
+                }
+            });
         }
 
         function updateThumbnail(index) {
             const items = document.querySelectorAll('.thumbnail-item');
-            items.forEach((el, i) => {
-                el.classList.toggle('active', i === index);
-                const itemId = taskItems[i]?.id;
-                if (annotations[itemId]) {
-                    el.classList.add('marked');
-                }
-            });
+            items.forEach((el, i) => el.classList.toggle('active', i === index));
+            refreshThumbnailsFromAnnotations();
             const active = items[index];
             if (active && active.scrollIntoView) {
                 active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -1158,21 +1164,20 @@
         // ============ 图片加载 ============
         function loadImage(index) {
             if (index < 0 || index >= taskItems.length) return;
+            // 提交当前图（如果有未保存状态）
+            // 注：不在此自动保存，避免误操作；用户须显式点保存/跳过
 
             currentIndex = index;
             const item = taskItems[index];
+            imageLoadTime[item.id] = Date.now();
 
-            // 更新信息
             document.getElementById('taskId').textContent = item.taskId;
             document.getElementById('folderName').textContent = item.folderPath;
             document.getElementById('imageName').textContent = item.imageName;
             document.getElementById('progressInfo').textContent = `任务 ${index + 1} / ${taskItems.length}`;
-
-            // 导航按钮
             document.getElementById('prevBtn').disabled = index === 0;
             document.getElementById('nextBtn').disabled = index === taskItems.length - 1;
 
-            // 加载图片
             img.src = item.imageUrl;
             img.onload = () => {
                 applyZoomMode();
@@ -1180,16 +1185,11 @@
                 restoreAnnotation(item.id);
             };
 
-            // 更新缩略图
             updateThumbnail(index);
-
-            // 重置侧边栏（如果有保存的数据会再恢复）
-            resetSidebar();
         }
 
         function initCanvas() {
             const rect = img.getBoundingClientRect();
-            // 使用图片原始尺寸作为 canvas 分辨率，保证导出质量
             canvas.width = img.naturalWidth || rect.width;
             canvas.height = img.naturalHeight || rect.height;
             canvas.style.width = rect.width + 'px';
@@ -1201,7 +1201,6 @@
             const wrapper = document.querySelector('.canvas-wrapper');
             const zoomIcon = document.getElementById('zoomIcon');
             const zoomText = document.getElementById('zoomText');
-            
             if (imageZoomMode === 'fit-width') {
                 container.classList.add('fit-width');
                 wrapper.classList.add('fit-width');
@@ -1218,83 +1217,13 @@
         function toggleZoomMode() {
             imageZoomMode = imageZoomMode === 'fit-height' ? 'fit-width' : 'fit-height';
             applyZoomMode();
-            // 重新调整 canvas 尺寸并恢复标注
             if (img.complete && img.naturalWidth) {
                 initCanvas();
-                restoreAnnotation(taskItems[currentIndex]?.id);
+                renderErrors();
             }
         }
 
-        // ============ Badcase 数量选择 ============
-        function selectBadcase(btn) {
-            document.querySelectorAll('.badcase-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('badcaseInput').value = btn.dataset.value;
-            updateSaveButton();
-        }
-
-        function onBadcaseInput(input) {
-            document.querySelectorAll('.badcase-btn').forEach(b => b.classList.remove('active'));
-            updateSaveButton();
-        }
-
-        // ============ 错误原因选择 ============
-        function toggleReason(btn) {
-            btn.classList.toggle('active');
-            updateSaveButton();
-        }
-
-        // ============ 更新保存按钮状态 ============
-        function updateSaveButton() {
-            const hasBadcase = getBadcaseCount() > 0;
-            const hasReason = getSelectedReasons().length > 0;
-            const hasDrawing = !isCanvasEmpty();
-            const hasAnnotation = hasBadcase || hasReason || hasDrawing;
-
-            const saveBtn = document.getElementById('saveBtn');
-            if (hasAnnotation) {
-                saveBtn.textContent = '✓ 保存标注';
-                saveBtn.classList.remove('skip-mode');
-            } else {
-                saveBtn.textContent = '→ 跳过此图';
-                saveBtn.classList.add('skip-mode');
-            }
-        }
-
-        // ============ 工具切换 ============
-        function setTool(tool) {
-            currentTool = tool;
-            document.getElementById('eraseTool').classList.toggle('active', tool === 'erase');
-            document.querySelectorAll('.color-dot').forEach(d => {
-                d.style.opacity = tool === 'erase' ? '0.5' : '1';
-            });
-            canvas.style.cursor = tool === 'draw' ? 'crosshair' : 'cell';
-        }
-
-        function setBrushColor(color, el) {
-            brushColor = color;
-            currentTool = 'draw';
-            document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
-            el.classList.add('active');
-            document.getElementById('eraseTool').classList.remove('active');
-            document.querySelectorAll('.color-dot').forEach(d => {
-                d.style.opacity = '1';
-            });
-            canvas.style.cursor = 'crosshair';
-        }
-
-        function setBrushSize(size, el) {
-            brushSize = size;
-            document.querySelectorAll('.size-dot').forEach(d => d.classList.remove('active'));
-            el.classList.add('active');
-        }
-
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            updateSaveButton();
-        }
-
-        // ============ Canvas 绘制 ============
+        // ============ Canvas 坐标 ============
         function getCanvasPos(e) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
@@ -1305,224 +1234,527 @@
             };
         }
 
-        canvas.addEventListener('mousedown', startDraw);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', endDraw);
-        canvas.addEventListener('mouseleave', endDraw);
+        // ============ BBox 绘制 ============
+        canvas.addEventListener('mousedown', startBBox);
+        canvas.addEventListener('mousemove', drawBBox);
+        canvas.addEventListener('mouseup', endBBox);
+        canvas.addEventListener('mouseleave', endBBox);
 
-        // 触摸支持
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousedown', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            canvas.dispatchEvent(mouseEvent);
+            const t = e.touches[0];
+            canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: t.clientX, clientY: t.clientY }));
         }, { passive: false });
 
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousemove', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            canvas.dispatchEvent(mouseEvent);
+            const t = e.touches[0];
+            canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: t.clientX, clientY: t.clientY }));
         }, { passive: false });
 
-        canvas.addEventListener('touchend', (e) => {
-            const mouseEvent = new MouseEvent('mouseup', {});
-            canvas.dispatchEvent(mouseEvent);
+        canvas.addEventListener('touchend', () => {
+            canvas.dispatchEvent(new MouseEvent('mouseup', {}));
         });
 
-        function startDraw(e) {
-            isDrawing = true;
-            const pos = getCanvasPos(e);
-            ctx.beginPath();
-            ctx.moveTo(pos.x, pos.y);
-            ctx.strokeStyle = currentTool === 'draw' ? brushColor : 'rgba(255,255,255,0.95)';
-            ctx.lineWidth = brushSize * (currentTool === 'erase' ? 4 : 1);
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-        }
-
-        function draw(e) {
-            if (!isDrawing) return;
-            const pos = getCanvasPos(e);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-        }
-
-        function endDraw() {
-            if (!isDrawing) return;
-            isDrawing = false;
-            ctx.closePath();
-            updateSaveButton();
-        }
-
-        function isCanvasEmpty() {
-            const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            for (let i = 3; i < pixelData.length; i += 4) {
-                if (pixelData[i] > 0) return false;
+        function startBBox(e) {
+            if (!currentErrorType) {
+                showToast('请先在左侧选择错误类型');
+                return;
             }
-            return true;
+            const pos = getCanvasPos(e);
+            isDrawingBBox = true;
+            bboxStart = pos;
+            bboxCurrent = pos;
         }
 
-        // ============ 导航 ============
-        function prevImage() {
-            if (currentIndex > 0) loadImage(currentIndex - 1);
+        function drawBBox(e) {
+            if (!isDrawingBBox) return;
+            bboxCurrent = getCanvasPos(e);
+            renderErrors();
+            renderPreviewBBox();
         }
 
-        function nextImage() {
-            if (currentIndex < taskItems.length - 1) loadImage(currentIndex + 1);
+        function renderPreviewBBox() {
+            if (!isDrawingBBox || !bboxStart || !bboxCurrent) return;
+            const x = Math.min(bboxStart.x, bboxCurrent.x);
+            const y = Math.min(bboxStart.y, bboxCurrent.y);
+            const w = Math.abs(bboxCurrent.x - bboxStart.x);
+            const h = Math.abs(bboxCurrent.y - bboxStart.y);
+            const cat = findCategory(currentErrorType);
+            ctx.save();
+            ctx.strokeStyle = cat ? cat.color : '#e74c3c';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([8, 4]);
+            ctx.strokeRect(x, y, w, h);
+            ctx.restore();
         }
 
-        // ============ 保存 / 跳过 ============
+        function endBBox() {
+            if (!isDrawingBBox) return;
+            isDrawingBBox = false;
+            if (!bboxStart || !bboxCurrent) { bboxStart = bboxCurrent = null; return; }
+
+            const x0 = Math.min(bboxStart.x, bboxCurrent.x);
+            const y0 = Math.min(bboxStart.y, bboxCurrent.y);
+            const w = Math.abs(bboxCurrent.x - bboxStart.x);
+            const h = Math.abs(bboxCurrent.y - bboxStart.y);
+
+            bboxStart = bboxCurrent = null;
+
+            // 过小框忽略（避免误触）
+            if (w < 5 || h < 5) {
+                renderErrors();
+                return;
+            }
+
+            pushError([Math.round(x0), Math.round(y0), Math.round(w), Math.round(h)]);
+        }
+
+        // ============ Error 列表管理 ============
+        function pushError(bboxArr) {
+            const cat = findCategory(currentErrorType);
+            const now = new Date().toISOString();
+            const err = {
+                error_id: `err_${String(currentErrors.length + 1).padStart(2, '0')}_${Date.now().toString(36)}`,
+                error_type: currentErrorType,
+                error_subtype: currentSubtype,
+                severity: null,
+                comment: '',
+                marks: [{
+                    mark_id: `m_${Date.now().toString(36)}`,
+                    role: 'primary',
+                    type: 'bbox',
+                    geometry: { bbox: bboxArr, points: null },
+                    color: cat ? cat.color : '#e74c3c',
+                    width: 2
+                }],
+                annotator_id: ANNOTATOR_ID,
+                created_at: now,
+                updated_at: now,
+                duration_ms: 0
+            };
+            currentErrors.push(err);
+            selectedErrorId = err.error_id;
+            renderErrors();
+            renderErrorList();
+            updateSaveButton();
+            scheduleLocalStorage();
+        }
+
+        function removeError(errorId) {
+            currentErrors = currentErrors.filter(e => e.error_id !== errorId);
+            if (selectedErrorId === errorId) selectedErrorId = null;
+            renderErrors();
+            renderErrorList();
+            updateSaveButton();
+            scheduleLocalStorage();
+        }
+
+        function undoLastError() {
+            if (currentErrors.length === 0) return;
+            const removed = currentErrors.pop();
+            if (selectedErrorId === removed.error_id) selectedErrorId = null;
+            renderErrors();
+            renderErrorList();
+            updateSaveButton();
+            scheduleLocalStorage();
+        }
+
+        function cancelDrawing() {
+            if (isDrawingBBox) {
+                isDrawingBBox = false;
+                bboxStart = bboxCurrent = null;
+                renderErrors();
+            }
+        }
+
+        function selectError(errorId) {
+            selectedErrorId = (selectedErrorId === errorId) ? null : errorId;
+            renderErrorList();
+            renderErrors();
+        }
+
+        function updateErrorComment(errorId, comment) {
+            const err = currentErrors.find(e => e.error_id === errorId);
+            if (!err) return;
+            err.comment = comment;
+            err.updated_at = new Date().toISOString();
+            scheduleLocalStorage();
+        }
+
+        // ============ 渲染 ============
+        function renderErrors() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            currentErrors.forEach((err, idx) => {
+                const mark = err.marks.find(m => m.role === 'primary') || err.marks[0];
+                if (!mark || !mark.geometry || !mark.geometry.bbox) return;
+                const [x, y, w, h] = mark.geometry.bbox;
+                const isSelected = err.error_id === selectedErrorId;
+                ctx.save();
+                ctx.strokeStyle = mark.color || '#e74c3c';
+                ctx.lineWidth = isSelected ? 4 : 2;
+                ctx.strokeRect(x, y, w, h);
+                // 序号标签
+                const label = `${idx + 1}`;
+                ctx.font = 'bold 18px sans-serif';
+                const padding = 4;
+                const textW = ctx.measureText(label).width;
+                ctx.fillStyle = mark.color || '#e74c3c';
+                ctx.fillRect(x, y, textW + padding * 2, 24);
+                ctx.fillStyle = 'white';
+                ctx.fillText(label, x + padding, y + 17);
+                ctx.restore();
+            });
+            if (isDrawingBBox) renderPreviewBBox();
+        }
+
+        function renderErrorList() {
+            const container = document.getElementById('errorListContainer');
+            if (currentErrors.length === 0) {
+                container.innerHTML = '<div class="error-list-empty">暂无错误。画框后会出现在这里。</div>';
+                return;
+            }
+            const list = document.createElement('div');
+            list.className = 'error-list';
+            currentErrors.forEach((err, idx) => {
+                const cat = findCategory(err.error_type);
+                const subtypeLabel = err.error_subtype && cat
+                    ? cat.subtypes.find(s => s.id === err.error_subtype)?.label
+                    : null;
+                const mark = err.marks.find(m => m.role === 'primary') || err.marks[0];
+                const bboxText = mark && mark.geometry && mark.geometry.bbox
+                    ? `x=${mark.geometry.bbox[0]}, y=${mark.geometry.bbox[1]}, w=${mark.geometry.bbox[2]}, h=${mark.geometry.bbox[3]}`
+                    : '无位置';
+                const item = document.createElement('div');
+                item.className = 'error-item' + (err.error_id === selectedErrorId ? ' selected' : '');
+                item.onclick = (e) => {
+                    if (e.target.tagName === 'TEXTAREA' || e.target.classList.contains('error-item-delete')) return;
+                    selectError(err.error_id);
+                };
+                const indexEl = document.createElement('div');
+                indexEl.className = 'error-item-index';
+                indexEl.style.background = cat ? cat.color : '#999';
+                indexEl.textContent = idx + 1;
+                const body = document.createElement('div');
+                body.className = 'error-item-body';
+                const typeEl = document.createElement('div');
+                typeEl.className = 'error-item-type';
+                typeEl.textContent = cat ? `${cat.label}${subtypeLabel ? ' · ' + subtypeLabel : ''}` : err.error_type;
+                const commentInput = document.createElement('textarea');
+                commentInput.className = 'error-item-comment-input';
+                commentInput.rows = 1;
+                commentInput.placeholder = '点击添加备注...';
+                commentInput.value = err.comment || '';
+                commentInput.onclick = (e) => e.stopPropagation();
+                commentInput.oninput = (e) => {
+                    updateErrorComment(err.error_id, e.target.value);
+                    // 自适应高度
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                };
+                setTimeout(() => {
+                    commentInput.style.height = 'auto';
+                    commentInput.style.height = commentInput.scrollHeight + 'px';
+                }, 0);
+                const bboxEl = document.createElement('div');
+                bboxEl.className = 'error-item-bbox';
+                bboxEl.textContent = bboxText;
+                body.appendChild(typeEl);
+                body.appendChild(commentInput);
+                body.appendChild(bboxEl);
+                const delBtn = document.createElement('button');
+                delBtn.className = 'error-item-delete';
+                delBtn.textContent = '✕';
+                delBtn.title = '删除此错误';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removeError(err.error_id);
+                };
+                item.appendChild(indexEl);
+                item.appendChild(body);
+                item.appendChild(delBtn);
+                list.appendChild(item);
+            });
+            container.innerHTML = '';
+            container.appendChild(list);
+        }
+
+        // ============ Save / Restore ============
+        function updateSaveButton() {
+            const saveBtn = document.getElementById('saveBtn');
+            if (currentErrors.length > 0) {
+                saveBtn.textContent = `✓ 保存标注（${currentErrors.length} 个错误）`;
+                saveBtn.classList.remove('skip-mode');
+            } else {
+                saveBtn.textContent = '→ 跳过此图';
+                saveBtn.classList.add('skip-mode');
+            }
+        }
+
         function saveAnnotation() {
             const item = taskItems[currentIndex];
-            const badcaseCount = getBadcaseCount();
-            const reasons = getSelectedReasons();
-            const hasDrawing = !isCanvasEmpty();
-            const hasAnnotation = badcaseCount > 0 || reasons.length > 0 || hasDrawing;
+            const status = currentErrors.length > 0 ? 'annotated' : 'skipped';
+            const now = new Date().toISOString();
+            const loadTs = imageLoadTime[item.id] || Date.now();
+            const duration = Date.now() - loadTs;
 
-            if (hasAnnotation) {
-                // 保存标注
-                const drawingData = hasDrawing ? canvas.toDataURL('image/png') : null;
-                annotations[item.id] = {
-                    itemId: item.id,
-                    taskId: item.taskId,
-                    folderPath: item.folderPath,
-                    imageName: item.imageName,
-                    badcaseCount,
-                    reasons,
-                    hasDrawing,
-                    drawingData,
-                    timestamp: new Date().toISOString()
-                };
-                showToast('✓ 标注已保存');
+            const existing = annotations[item.id];
+            const startedAt = existing?.annotation?.started_at || new Date(loadTs).toISOString();
+
+            annotations[item.id] = serializeAnnotation(item, {
+                status,
+                errors: currentErrors,
+                startedAt,
+                savedAt: now,
+                durationMs: (existing?.annotation?.total_duration_ms || 0) + duration
+            });
+
+            updateStats();
+            updateThumbnail(currentIndex);
+            scheduleLocalStorage();
+
+            if (status === 'annotated') {
+                showToast(`✓ 已保存 ${currentErrors.length} 个错误`);
             } else {
-                // 跳过：如果之前有标注则删除
-                if (annotations[item.id]) {
-                    delete annotations[item.id];
-                }
-                showToast('→ 已跳过');
+                showToast('→ 已跳过此图');
             }
 
-            // 更新缩略图状态
-            updateThumbnail(currentIndex);
-            updateStats();
-
-            // 自动下一张
             if (currentIndex < taskItems.length - 1) {
-                setTimeout(() => loadImage(currentIndex + 1), 300);
+                setTimeout(() => loadImage(currentIndex + 1), 200);
             } else {
                 showToast('已到最后一张！');
             }
         }
 
-        function getBadcaseCount() {
-            const val = document.getElementById('badcaseInput').value;
-            return val ? parseInt(val) || 0 : 0;
-        }
-
-        function getSelectedReasons() {
-            return Array.from(document.querySelectorAll('.reason-btn.active')).map(b => b.dataset.reason);
-        }
-
-        function resetSidebar() {
-            document.querySelectorAll('.badcase-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('badcaseInput').value = '';
-            document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
-            updateSaveButton();
+        function serializeAnnotation(item, { status, errors, startedAt, savedAt, durationMs }) {
+            return {
+                schema_version: SCHEMA_VERSION,
+                image: {
+                    task_id: item.taskId,
+                    source_path: `${item.folderPath}/${item.imageName}`,
+                    source_hash: item.sourceHash || null,
+                    width: img.naturalWidth || null,
+                    height: img.naturalHeight || null,
+                    metadata: item.metadata || { task_ids: [item.taskId] }
+                },
+                annotation: {
+                    status,
+                    errors: errors.map(e => ({ ...e })),
+                    session_id: sessionId,
+                    annotator_id: ANNOTATOR_ID,
+                    started_at: startedAt,
+                    saved_at: savedAt,
+                    total_duration_ms: Math.round(durationMs),
+                    client: { tool_version: TOOL_VERSION, browser: navigator.userAgent }
+                }
+            };
         }
 
         function restoreAnnotation(itemId) {
             const ann = annotations[itemId];
-            if (!ann) {
-                clearCanvas();
-                resetSidebar();
-                return;
-            }
-
-            // 恢复 badcase
-            if (ann.badcaseCount) {
-                const btn = document.querySelector(`.badcase-btn[data-value="${ann.badcaseCount}"]`);
-                if (btn) {
-                    btn.classList.add('active');
-                } else {
-                    document.getElementById('badcaseInput').value = ann.badcaseCount;
-                }
-            }
-
-            // 恢复原因
-            if (ann.reasons) {
-                ann.reasons.forEach(r => {
-                    const btn = document.querySelector(`.reason-btn[data-reason="${r}"]`);
-                    if (btn) btn.classList.add('active');
-                });
-            }
-
-            // 恢复画布
-            clearCanvas();
-            if (ann.drawingData) {
-                const image = new Image();
-                image.onload = () => {
-                    ctx.drawImage(image, 0, 0);
-                    updateSaveButton();
-                };
-                image.src = ann.drawingData;
-            } else {
-                updateSaveButton();
-            }
+            currentErrors = ann ? ann.annotation.errors.map(e => ({ ...e })) : [];
+            currentErrorType = null;
+            currentSubtype = null;
+            selectedErrorId = null;
+            renderTaxonomySelector();
+            renderErrors();
+            renderErrorList();
+            updateSaveButton();
+            updateDrawingHint();
         }
 
         function updateStats() {
-            markedCount = Object.keys(annotations).length;
-            document.getElementById('statsBadge').textContent = `已标注: ${markedCount}`;
+            const markedCount = Object.values(annotations)
+                .filter(a => a.annotation.status === 'annotated').length;
+            const skippedCount = Object.values(annotations)
+                .filter(a => a.annotation.status === 'skipped').length;
+            document.getElementById('statsBadge').textContent =
+                `已标 ${markedCount} / 跳过 ${skippedCount} / 共 ${taskItems.length}`;
         }
 
-        // ============ 导出结果 ============
+        // ============ localStorage 增量持久化 ============
+        function storageKey(itemId) {
+            const item = taskItems.find(t => t.id === itemId);
+            return STORAGE_PREFIX + (item ? item.taskId : 'unknown') + ':' + itemId;
+        }
+
+        function scheduleLocalStorage() {
+            clearTimeout(storageTimer);
+            storageTimer = setTimeout(persistCurrent, STORAGE_DEBOUNCE_MS);
+        }
+
+        function persistCurrent() {
+            const item = taskItems[currentIndex];
+            if (!item) return;
+            // 始终把当前编辑状态（即便未点保存）写盘，防止刷新丢失
+            const status = currentErrors.length > 0 ? 'annotated' : 'pending';
+            const data = serializeAnnotation(item, {
+                status,
+                errors: currentErrors,
+                startedAt: new Date(imageLoadTime[item.id] || Date.now()).toISOString(),
+                savedAt: new Date().toISOString(),
+                durationMs: 0
+            });
+            try {
+                localStorage.setItem(storageKey(item.id), JSON.stringify(data));
+            } catch (e) {
+                console.warn('localStorage 写入失败', e);
+            }
+        }
+
+        function loadLocalStorageForItem(itemId) {
+            const item = taskItems.find(t => t.id === itemId);
+            if (!item) return null;
+            try {
+                const raw = localStorage.getItem(storageKey(itemId));
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (data && data.annotation) return data;
+            } catch (e) {
+                console.warn('localStorage 读取失败', e);
+            }
+            return null;
+        }
+
+        function tryResumeFromStorage() {
+            // 启动后扫一遍 taskItems，看 localStorage 里是否有 pending 数据
+            const resumed = [];
+            for (const item of taskItems) {
+                const stored = loadLocalStorageForItem(item.id);
+                if (stored && stored.annotation.status !== 'skipped' && stored.annotation.errors?.length > 0) {
+                    annotations[item.id] = stored;
+                    resumed.push(item.imageName);
+                }
+            }
+            if (resumed.length > 0) {
+                showToast(`⚠️ 检测到 ${resumed.length} 个未导出的标注（已恢复）`);
+            }
+        }
+
+        // ============ sha256 ============
+        async function computeSha256(file) {
+            try {
+                if (!window.crypto || !window.crypto.subtle) return null;
+                const buf = await file.arrayBuffer();
+                const hash = await window.crypto.subtle.digest('SHA-256', buf);
+                const hex = Array.from(new Uint8Array(hash))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+                return 'sha256:' + hex;
+            } catch (e) {
+                console.warn('sha256 计算失败', e);
+                return null;
+            }
+        }
+
+        // ============ 导出 ============
         async function exportResults() {
-            const annList = Object.values(annotations);
+            // 强制先把当前编辑写盘
+            persistCurrent();
+            const item = taskItems[currentIndex];
+            if (item) {
+                const stored = loadLocalStorageForItem(item.id);
+                if (stored) annotations[item.id] = stored;
+            }
+
+            const annList = Object.values(annotations).filter(a => a.annotation.status !== 'pending');
             if (annList.length === 0) {
                 showToast('没有标注数据可导出');
                 return;
             }
 
             showLoading('正在打包导出...');
-
             try {
                 const zip = new JSZip();
-
-                for (const ann of annList) {
-                    const folderName = ann.taskId;
-                    const folder = zip.folder(folderName);
-
-                    // 1. 生成带痕迹的图片
-                    const item = taskItems.find(t => t.id === ann.itemId || (t.taskId === ann.taskId && t.imageName === ann.imageName));
-                    if (item) {
-                        const mergedImage = await mergeImageWithDrawing(item.imageUrl, ann.drawingData);
-                        const imageData = mergedImage.split(',')[1];
-                        const ext = item.imageName.split('.').pop();
-                        folder.file(`marked_${item.imageName}`, imageData, { base64: true });
+                // 预计算 hash
+                for (const item of taskItems) {
+                    if (!annotations[item.id] || annotations[item.id].annotation.status === 'pending') continue;
+                    if (!item.sourceHash) {
+                        item.sourceHash = await computeSha256(item.imageFile);
                     }
-
-                    // 2. 生成错误信息 txt
-                    const errorContent = generateErrorTxt(ann);
-                    folder.file('error_info.txt', errorContent);
-
-                    // 3. 复制任务编号
-                    folder.file('task_id.txt', ann.taskId);
+                    annotations[item.id].image.source_hash = item.sourceHash;
                 }
 
-                // 生成总报告
-                const report = generateReport();
-                zip.file('标注报告.txt', report);
+                const sessionImages = [];
+                const statsRows = [];
+
+                for (const item of taskItems) {
+                    const ann = annotations[item.id];
+                    if (!ann || ann.annotation.status === 'pending') continue;
+                    const taskId = item.taskId;
+                    const folder = zip.folder(taskId);
+                    const annFolder = folder.folder('annotations');
+
+                    annFolder.file(`${ANNOTATOR_ID}.json`, JSON.stringify(ann, null, 2));
+
+                    // source.<ext>
+                    const ext = item.imageName.split('.').pop();
+                    const imgData = await item.imageFile.arrayBuffer();
+                    folder.file(`source.${ext}`, imgData);
+
+                    // 派生 stats.jsonl 行
+                    ann.annotation.errors.forEach(err => {
+                        const mark = err.marks.find(m => m.role === 'primary') || err.marks[0];
+                        statsRows.push({
+                            task_id: taskId,
+                            image: item.imageName,
+                            error_id: err.error_id,
+                            error_type: err.error_type,
+                            subtype: err.error_subtype,
+                            bbox: mark && mark.geometry ? mark.geometry.bbox : null,
+                            comment: err.comment || '',
+                            annotator_id: err.annotator_id,
+                            severity: err.severity,
+                            duration_ms: err.duration_ms,
+                            saved_at: ann.annotation.saved_at
+                        });
+                    });
+
+                    sessionImages.push({
+                        task_id: taskId,
+                        source_path: ann.image.source_path,
+                        status: ann.annotation.status,
+                        error_count: ann.annotation.errors.length,
+                        annotation_file: `${taskId}/annotations/${ANNOTATOR_ID}.json`
+                    });
+                }
+
+                // _session.json
+                const statusCount = { annotated: 0, skipped: 0, pending: 0 };
+                const errorTypeCount = {};
+                Object.values(annotations).forEach(a => {
+                    statusCount[a.annotation.status] = (statusCount[a.annotation.status] || 0) + 1;
+                    if (a.annotation.status === 'annotated') {
+                        a.annotation.errors.forEach(e => {
+                            errorTypeCount[e.error_type] = (errorTypeCount[e.error_type] || 0) + 1;
+                        });
+                    }
+                });
+
+                const sessionJson = {
+                    schema_version: SCHEMA_VERSION,
+                    session_id: sessionId,
+                    annotator_id: ANNOTATOR_ID,
+                    annotator_name: null,
+                    source_folder: taskItems[0]?.folderPath || '',
+                    started_at: sessionStartAt,
+                    ended_at: new Date().toISOString(),
+                    total_images: taskItems.length,
+                    status_count: statusCount,
+                    error_type_count: errorTypeCount,
+                    images: sessionImages
+                };
+                zip.file('_session.json', JSON.stringify(sessionJson, null, 2));
+
+                // _stats.jsonl
+                const statsText = statsRows.map(r => JSON.stringify(r)).join('\n');
+                zip.file('_stats.jsonl', statsText);
+
+                // taxonomy.json 快照
+                zip.file('taxonomy.json', JSON.stringify(taxonomy, null, 2));
 
                 const content = await zip.generateAsync({ type: 'blob' });
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                saveAs(content, `批阅标注结果_${timestamp}.zip`);
+                const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                saveAs(content, `批阅标注结果_${ts}.zip`);
 
                 hideLoading();
                 showToast(`✓ 已导出 ${annList.length} 个标注结果`);
@@ -1533,80 +1765,16 @@
             }
         }
 
-        function mergeImageWithDrawing(imageUrl, drawingData) {
-            return new Promise((resolve, reject) => {
-                const image = new Image();
-                image.crossOrigin = 'anonymous';
-                image.onload = () => {
-                    const c = document.createElement('canvas');
-                    c.width = image.naturalWidth;
-                    c.height = image.naturalHeight;
-                    const cx = c.getContext('2d');
-                    cx.drawImage(image, 0, 0);
+        // ============ 导航 ============
+        function prevImage() { if (currentIndex > 0) loadImage(currentIndex - 1); }
+        function nextImage() { if (currentIndex < taskItems.length - 1) loadImage(currentIndex + 1); }
 
-                    if (drawingData) {
-                        const drawImg = new Image();
-                        drawImg.onload = () => {
-                            cx.drawImage(drawImg, 0, 0);
-                            resolve(c.toDataURL('image/jpeg', 0.95));
-                        };
-                        drawImg.onerror = reject;
-                        drawImg.src = drawingData;
-                    } else {
-                        resolve(c.toDataURL('image/jpeg', 0.95));
-                    }
-                };
-                image.onerror = reject;
-                image.src = imageUrl;
-            });
-        }
-
-        function generateErrorTxt(ann) {
-            const lines = [
-                `任务编号: ${ann.taskId}`,
-                `文件夹: ${ann.folderPath}`,
-                `图片名称: ${ann.imageName}`,
-                `标注时间: ${ann.timestamp}`,
-                '',
-                `Badcase 数量: ${ann.badcaseCount}`,
-                `错误原因: ${ann.reasons.join(', ')}`,
-                '',
-                '--- 详细信息 ---',
-                `是否有勾画痕迹: ${ann.hasDrawing ? '是' : '否'}`
-            ];
-            return lines.join('\n');
-        }
-
-        function generateReport() {
-            const lines = [
-                '批阅标注结果报告',
-                '==================',
-                `生成时间: ${new Date().toLocaleString()}`,
-                `总任务数: ${taskItems.length}`,
-                `已标注数: ${Object.keys(annotations).length}`,
-                `跳过数: ${taskItems.length - Object.keys(annotations).length}`,
-                '',
-                '--- 标注明细 ---',
-                ''
-            ];
-
-            Object.values(annotations).forEach((ann, i) => {
-                lines.push(`${i + 1}. 任务: ${ann.taskId}`);
-                lines.push(`   路径: ${ann.folderPath}`);
-                lines.push(`   Badcase: ${ann.badcaseCount} 个`);
-                lines.push(`   原因: ${ann.reasons.join(', ')}`);
-                lines.push('');
-            });
-
-            return lines.join('\n');
-        }
-
-        // ============ 提示 ============
+        // ============ Toast / Loading ============
         function showToast(msg) {
             const toast = document.getElementById('toast');
             toast.textContent = msg;
             toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2000);
+            setTimeout(() => toast.classList.remove('show'), 2200);
         }
 
         function showLoading(text) {
@@ -1620,36 +1788,46 @@
 
         // ============ 键盘快捷键 ============
         document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') {
-                if (e.key === 'Enter') {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
                     e.target.blur();
                     saveAnnotation();
                 }
                 return;
             }
-
-            switch(e.key) {
+            switch (e.key) {
                 case 'ArrowLeft': prevImage(); break;
                 case 'ArrowRight': nextImage(); break;
                 case 's': case 'S': case 'Enter':
-                    e.preventDefault();
-                    saveAnnotation();
+                    e.preventDefault(); saveAnnotation(); break;
+                case 'z': case 'Z':
+                    e.preventDefault(); undoLastError(); break;
+                case 'Escape':
+                    e.preventDefault(); cancelDrawing(); break;
+                case 'Backspace': case 'Delete':
+                    if (selectedErrorId) { e.preventDefault(); removeError(selectedErrorId); }
                     break;
             }
         });
 
-        // ============ 窗口大小改变时重置 canvas ============
+        // ============ 窗口大小改变 ============
         let resizeTimer;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(() => {
                 if (taskItems.length > 0) {
                     initCanvas();
-                    const item = taskItems[currentIndex];
-                    restoreAnnotation(item.id);
+                    renderErrors();
                 }
             }, 200);
         });
+
+        // ============ 启动 ============
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTaxonomy();
+        });
+        // 兜底：若 DOMContentLoaded 已触发
+        loadTaxonomy();
     </script>
 </body>
 </html>

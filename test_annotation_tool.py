@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-图片批阅标注工具 - 自动化测试脚本
-使用 Playwright 进行端到端测试
+图片批阅标注工具 v2 - 自动化测试脚本
+测试新的 bbox 框选 + 结构化 events + JSON 导出格式
 """
 
 import asyncio
@@ -10,25 +10,28 @@ import socketserver
 import threading
 import os
 import sys
-import tempfile
+import io
+import json
 import zipfile
-import re
 from pathlib import Path
 
 from playwright.async_api import async_playwright, expect
 
 PORT = 8765
 BASE_URL = f"http://localhost:{PORT}/annotation-tool.html"
+PROJECT_DIR = Path(__file__).parent
 
 
 class QuietHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(PROJECT_DIR), **kwargs)
     def log_message(self, format, *args):
-        pass  # 静默日志
+        pass
 
 
 def start_server():
-    """在后台线程启动本地HTTP服务器"""
     handler = QuietHTTPRequestHandler
+    socketserver.TCPServer.allow_reuse_address = True
     httpd = socketserver.TCPServer(("", PORT), handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -36,409 +39,352 @@ def start_server():
 
 
 async def inject_mock_data(page):
-    """向页面注入模拟数据，模拟文件夹解析完成后的状态"""
+    """注入 3 张模拟图片，绕过文件选择"""
     await page.evaluate("""
         async () => {
-            // 创建模拟图片 Blob URL
-            const canvas = document.createElement('canvas');
-            canvas.width = 800;
-            canvas.height = 600;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#f5f5f5';
-            ctx.fillRect(0, 0, 800, 600);
-            ctx.fillStyle = '#333';
-            ctx.font = '20px sans-serif';
-            ctx.fillText('Mock Image 1', 350, 300);
-            
-            const canvas2 = document.createElement('canvas');
-            canvas2.width = 800;
-            canvas2.height = 600;
-            const ctx2 = canvas2.getContext('2d');
-            ctx2.fillStyle = '#e8f4f8';
-            ctx2.fillRect(0, 0, 800, 600);
-            ctx2.fillStyle = '#333';
-            ctx2.font = '20px sans-serif';
-            ctx2.fillText('Mock Image 2', 350, 300);
-
+            const makeImg = async (text, bg, name) => {
+                const c = document.createElement('canvas');
+                c.width = 800; c.height = 600;
+                const cx = c.getContext('2d');
+                cx.fillStyle = bg; cx.fillRect(0, 0, 800, 600);
+                cx.fillStyle = '#333'; cx.font = '20px sans-serif';
+                cx.fillText(text, 300, 300);
+                const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.9));
+                const file = new File([blob], name, { type: 'image/jpeg' });
+                return { url: URL.createObjectURL(file), file };
+            };
+            const img1 = await makeImg('Mock 1', '#f5f5f5', '1.jpg');
+            const img2 = await makeImg('Mock 2', '#e8f4f8', '2.jpg');
+            const img3 = await makeImg('Mock 3', '#fff5f5', '张三.jpg');
             taskItems = [
-                {
-                    id: 'db45c6d8-04ed-4a71-a7d2-2179957bd9b4',
-                    taskId: 'db45c6d8-04ed-4a71-a7d2-2179957bd9b4',
-                    folderPath: '未匹配/1',
-                    subFolder: '未匹配',
-                    idxFolder: '1',
-                    imageName: '1.jpg',
-                    imageUrl: canvas.toDataURL('image/jpeg')
-                },
-                {
-                    id: 'bda0718b-3e30-4cc4-93b1-265eb54a86d2',
-                    taskId: 'bda0718b-3e30-4cc4-93b1-265eb54a86d2',
-                    folderPath: '未匹配/2',
-                    subFolder: '未匹配',
-                    idxFolder: '2',
-                    imageName: '2.jpg',
-                    imageUrl: canvas2.toDataURL('image/jpeg')
-                },
-                {
-                    id: 'aabbccdd-1122-3344-5566-77889900aabb',
-                    taskId: 'aabbccdd-1122-3344-5566-77889900aabb',
-                    folderPath: '学生卷/张三',
-                    subFolder: '学生卷',
-                    idxFolder: '张三',
-                    imageName: '张三.jpg',
-                    imageUrl: canvas.toDataURL('image/jpeg')
-                }
+                { id: 'db45c6d8-04ed-4a71-a7d2-2179957bd9b4', taskId: 'db45c6d8-04ed-4a71-a7d2-2179957bd9b4',
+                  folderPath: '未匹配/1', imageName: '1.jpg', imageUrl: img1.url, imageFile: img1.file,
+                  metadata: { task_ids: ['db45c6d8-04ed-4a71-a7d2-2179957bd9b4'] } },
+                { id: 'bda0718b-3e30-4cc4-93b1-265eb54a86d2', taskId: 'bda0718b-3e30-4cc4-93b1-265eb54a86d2',
+                  folderPath: '未匹配/2', imageName: '2.jpg', imageUrl: img2.url, imageFile: img2.file,
+                  metadata: { task_ids: ['bda0718b-3e30-4cc4-93b1-265eb54a86d2'] } },
+                { id: 'aabbccdd-1122-3344-5566-77889900aabb', taskId: 'aabbccdd-1122-3344-5566-77889900aabb',
+                  folderPath: '学生卷/张三', imageName: '张三.jpg', imageUrl: img3.url, imageFile: img3.file,
+                  metadata: { task_ids: ['aabbccdd-1122-3344-5566-77889900aabb'] } }
             ];
-            
             initUI();
             initThumbnails();
             loadImage(0);
             updateStats();
         }
     """)
+    await page.wait_for_function("() => document.getElementById('previewImage').complete && document.getElementById('previewImage').naturalWidth > 0")
+
+
+async def draw_bbox_on_canvas(page, x1, y1, x2, y2):
+    """在 canvas 上拖动鼠标画一个 bbox"""
+    canvas = page.locator("#drawingCanvas")
+    box = await canvas.bounding_box()
+    await page.mouse.move(box['x'] + x1, box['y'] + y1)
+    await page.mouse.down()
+    await page.mouse.move(box['x'] + x2, box['y'] + y2, steps=5)
+    await page.mouse.up()
 
 
 async def run_tests():
-    """运行所有测试"""
     print("=" * 60)
-    print("图片批阅标注工具 - 自动化测试")
+    print("图片批阅标注工具 v2 - 自动化测试")
     print("=" * 60)
-    
+
     server = start_server()
-    await asyncio.sleep(0.5)  # 等待服务器启动
-    
+    await asyncio.sleep(0.5)
+
     passed = 0
     failed = 0
     browser = None
-    
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(viewport={'width': 1440, 'height': 900})
         page = await context.new_page()
-        
-        # 打开控制台日志
         page.on("console", lambda msg: print(f"  [Browser {msg.type}] {msg.text}") if msg.type == "error" else None)
-        
+
         try:
-            # ============ 测试 1: 页面加载 ============
-            print("\n[测试 1] 页面加载...")
+            # 测试 1: 页面加载 + taxonomy
+            print("\n[测试 1] 页面加载 + taxonomy 加载...")
             await page.goto(BASE_URL, wait_until="networkidle")
             title = await page.title()
             assert title == "图片批阅标注工具", f"标题错误: {title}"
-            
-            # 检查空状态显示
-            empty_state = page.locator("#emptyState")
-            await expect(empty_state).to_be_visible()
-            print("  ✓ 页面加载成功，空状态显示正确")
+            tax = await page.evaluate("() => taxonomy && taxonomy.categories && taxonomy.categories.length")
+            assert tax == 4, f"taxonomy 应有 4 个大类，实际: {tax}"
+            print("  ✓ 页面加载，taxonomy 正确加载 4 个大类")
             passed += 1
-            
-            # ============ 测试 2: 注入数据后UI切换 ============
+
+            # 测试 2: 数据加载 + UI 切换
             print("\n[测试 2] 数据加载与UI切换...")
             await inject_mock_data(page)
-            await asyncio.sleep(0.5)
-            
-            # 空状态应隐藏，工作区应显示
-            await expect(empty_state).to_be_hidden()
             await expect(page.locator("#sidebar")).to_be_visible()
             await expect(page.locator("#contentArea")).to_be_visible()
             await expect(page.locator("#thumbnailBar")).to_be_visible()
-            
-            # 检查任务信息
-            task_id = await page.locator("#taskId").text_content()
-            assert "db45c6d8" in task_id, f"任务ID显示错误: {task_id}"
-            
+            task_id_text = await page.locator("#taskId").text_content()
+            assert "db45c6d8" in task_id_text
             progress = await page.locator("#progressInfo").text_content()
-            assert "任务 1 / 3" == progress, f"进度显示错误: {progress}"
-            print("  ✓ 数据注入成功，UI切换正确")
+            assert "任务 1 / 3" == progress, f"进度错误: {progress}"
+            # error type 按钮应有 4 个
+            type_btn_count = await page.locator(".error-type-btn").count()
+            assert type_btn_count == 4, f"应有 4 个 error type 按钮，实际: {type_btn_count}"
+            print("  ✓ UI 切换正确，taxonomy 渲染 4 个按钮")
             passed += 1
-            
-            # ============ 测试 3: Badcase 数量选择 ============
-            print("\n[测试 3] Badcase 数量选择...")
-            btn1 = page.locator('.badcase-btn[data-value="1"]')
-            await btn1.click()
-            await expect(btn1).to_have_class(re.compile("active"))
-            
-            input_val = await page.locator("#badcaseInput").input_value()
-            assert input_val == "1", f"输入框值错误: {input_val}"
-            
-            # 点击按钮2
-            btn2 = page.locator('.badcase-btn[data-value="2"]')
-            await btn2.click()
-            await expect(btn2).to_have_class(re.compile("active"))
-            await expect(btn1).not_to_have_class(re.compile("active"))
-            
-            # 自定义输入
-            await page.locator("#badcaseInput").fill("5")
-            await page.locator("#badcaseInput").blur()
-            await expect(btn2).not_to_have_class(re.compile("active"))
-            print("  ✓ Badcase 数量选择功能正常")
+
+            # 测试 3: 错误类型选择 + 子类型联动
+            print("\n[测试 3] 错误类型选择 + 子类型联动...")
+            ocr_btn = page.locator(".error-type-btn[data-type-id='ocr']")
+            await ocr_btn.click()
+            await expect(ocr_btn).to_have_class("error-type-btn active")
+            subtype_count = await page.locator(".subtype-btn").count()
+            assert subtype_count == 5, f"OCR 应有 4 subtype + 1 'none' = 5 个按钮，实际: {subtype_count}"
+            current_type = await page.evaluate("() => currentErrorType")
+            assert current_type == "ocr", f"currentErrorType 应为 ocr，实际: {current_type}"
+            # 切换到解题，子类应更换
+            sol_btn = page.locator(".error-type-btn[data-type-id='solution']")
+            await sol_btn.click()
+            subtype_labels = await page.locator(".subtype-btn").all_inner_texts()
+            assert any("逻辑错" in s for s in subtype_labels), "解题应包含 '逻辑错'"
+            assert not any("漏字" in s for s in subtype_labels), "解题不应包含 OCR 的 '漏字'"
+            print("  ✓ 错误类型 + 子类型联动正常")
             passed += 1
-            
-            # ============ 测试 4: 错误原因多选 ============
-            print("\n[测试 4] 错误原因多选...")
-            reason1 = page.locator('.reason-btn[data-reason="切题"]')
-            reason2 = page.locator('.reason-btn[data-reason="OCR"]')
-            reason3 = page.locator('.reason-btn[data-reason="解题"]')
-            
-            await reason1.click()
-            await reason2.click()
-            await expect(reason1).to_have_class(re.compile("active"))
-            await expect(reason2).to_have_class(re.compile("active"))
-            await expect(reason3).not_to_have_class(re.compile("active"))
-            
-            # 取消选择
-            await reason1.click()
-            await expect(reason1).not_to_have_class(re.compile("active"))
-            print("  ✓ 错误原因多选功能正常")
+
+            # 测试 4: BBox 框选
+            print("\n[测试 4] BBox 框选...")
+            # 先选 ocr 类型
+            await page.locator(".error-type-btn[data-type-id='ocr']").click()
+            # 画一个 bbox（注意：canvas 内部坐标系是 800x600，所以坐标在该范围）
+            await draw_bbox_on_canvas(page, 100, 100, 250, 200)
+            await page.wait_for_function("() => currentErrors.length === 1", timeout=2000)
+            err_count = await page.evaluate("() => currentErrors.length")
+            assert err_count == 1, f"画一个框后应有 1 个错误，实际: {err_count}"
+            # error list 应有 1 项
+            list_items = await page.locator(".error-item").count()
+            assert list_items == 1, f"列表应显示 1 个 error item，实际: {list_items}"
+            # bbox 坐标应记录（注意：canvas 内部坐标系是 800x600 natural，display 可能缩放，
+            # 所以允许 ±5px 容差）
+            bbox = await page.evaluate("() => currentErrors[0].marks[0].geometry.bbox")
+            assert bbox is not None and len(bbox) == 4, "bbox 应是 [x,y,w,h]"
+            assert abs(bbox[0] - 100) <= 10 and abs(bbox[1] - 100) <= 10, f"bbox 起点应近 (100,100)，实际: {bbox}"
+            assert bbox[2] > 100 and bbox[3] > 50, f"bbox 宽高应足够大，实际: {bbox}"
+            print(f"  ✓ BBox 框选正常，bbox={bbox}")
             passed += 1
-            
-            # ============ 测试 5: Canvas 绘制 ============
-            print("\n[测试 5] Canvas 绘制功能...")
-            canvas = page.locator("#drawingCanvas")
-            
-            # 在 canvas 上画一条线
-            box = await canvas.bounding_box()
-            await canvas.hover()
-            await page.mouse.move(box['x'] + 100, box['y'] + 100)
-            await page.mouse.down()
-            await page.mouse.move(box['x'] + 200, box['y'] + 200, steps=10)
-            await page.mouse.up()
-            
-            # 检查 canvas 不为空
-            is_empty = await page.evaluate("() => isCanvasEmpty()")
-            assert not is_empty, "Canvas 绘制后不应为空"
-            print("  ✓ Canvas 绘制功能正常")
+
+            # 测试 5: 框太小被忽略
+            print("\n[测试 5] 框太小被忽略...")
+            # 画一个 3x3 的小框
+            await draw_bbox_on_canvas(page, 300, 300, 303, 303)
+            await asyncio.sleep(0.2)
+            err_count = await page.evaluate("() => currentErrors.length")
+            assert err_count == 1, f"小框应被忽略，错误数仍应为 1，实际: {err_count}"
+            print("  ✓ 小框被正确忽略")
             passed += 1
-            
-            # ============ 测试 6: 保存标注逻辑 ============
-            print("\n[测试 6] 保存标注逻辑...")
-            
-            # 配置标注：badcase=2, 原因=切题+OCR, 有绘制
-            await page.locator('.badcase-btn[data-value="2"]').click()
-            await page.locator('.reason-btn[data-reason="切题"]').click()
-            await page.locator('.reason-btn[data-reason="OCR"]').click()
-            
+
+            # 测试 6: 未选错误类型时画框无效
+            print("\n[测试 6] 未选错误类型时画框无效...")
+            # 清除选中状态（用 evaluate，因为 UI 没有反选按钮）
+            await page.evaluate("() => { currentErrorType = null; currentSubtype = null; renderTaxonomySelector(); updateDrawingHint(); }")
+            await draw_bbox_on_canvas(page, 400, 400, 500, 500)
+            await asyncio.sleep(0.2)
+            err_count = await page.evaluate("() => currentErrors.length")
+            assert err_count == 1, f"未选类型时画框应无效，错误数仍为 1，实际: {err_count}"
+            # 重新选回 ocr 以便后续测试
+            await page.locator(".error-type-btn[data-type-id='ocr']").click()
+            print("  ✓ 未选类型时画框被拒绝")
+            passed += 1
+
+            # 测试 7: 添加备注
+            print("\n[测试 7] 添加备注...")
+            comment_input = page.locator(".error-item-comment-input").first
+            await comment_input.fill("把 7 识别成 1")
+            await asyncio.sleep(0.1)
+            comment_val = await page.evaluate("() => currentErrors[0].comment")
+            assert comment_val == "把 7 识别成 1", f"备注未更新: {comment_val}"
+            print("  ✓ 备注更新正常")
+            passed += 1
+
+            # 测试 8: 保存按钮动态文本
+            print("\n[测试 8] 保存按钮动态文本...")
             save_btn = page.locator("#saveBtn")
             btn_text = await save_btn.text_content()
-            assert "保存标注" in btn_text, f"有标注时应显示'保存标注'，实际: {btn_text}"
-            
-            # 保存
-            await save_btn.click()
-            await asyncio.sleep(0.5)
-            
-            # 应自动跳转到第二张
+            assert "保存标注" in btn_text and "1" in btn_text, f"应显示 '保存标注（1 个错误）'，实际: {btn_text}"
+            # 删除唯一错误后应变为"跳过"
+            await page.locator(".error-item-delete").first.click()
+            await asyncio.sleep(0.1)
+            btn_text = await save_btn.text_content()
+            assert "跳过" in btn_text, f"无错误时应显示 '跳过'，实际: {btn_text}"
+            print("  ✓ 保存按钮文本随状态切换")
+            passed += 1
+
+            # 测试 9: 删除错误 + 撤销 (Z 键)
+            print("\n[测试 9] 删除 + 撤销...")
+            # 重选 ocr，画两个框
+            await page.locator(".error-type-btn[data-type-id='ocr']").click()
+            await draw_bbox_on_canvas(page, 100, 100, 200, 200)
+            await asyncio.sleep(0.1)
+            await draw_bbox_on_canvas(page, 300, 300, 400, 400)
+            await asyncio.sleep(0.1)
+            err_count = await page.evaluate("() => currentErrors.length")
+            assert err_count == 2, f"应有两个错误，实际: {err_count}"
+            # Z 撤销
+            await page.keyboard.press("z")
+            await asyncio.sleep(0.1)
+            err_count = await page.evaluate("() => currentErrors.length")
+            assert err_count == 1, f"撤销后应剩 1 个，实际: {err_count}"
+            print("  ✓ 删除 + Z 撤销正常")
+            passed += 1
+
+            # 测试 10: 保存逻辑 + 自动跳转
+            print("\n[测试 10] 保存逻辑 + 自动跳转...")
+            await page.locator("#saveBtn").click()
+            await asyncio.sleep(0.4)
             progress = await page.locator("#progressInfo").text_content()
-            assert "任务 2 / 3" == progress, f"保存后应跳转到第2张，实际: {progress}"
-            
-            # 检查缩略图红点
+            assert "任务 2 / 3" == progress, f"保存后应跳到第 2 张，实际: {progress}"
+            # 第一张缩略图应有 marked
             thumb1 = page.locator(".thumbnail-item").nth(0)
-            await expect(thumb1).to_have_class(re.compile("marked"))
-            print("  ✓ 保存标注逻辑正确，自动跳转正常")
+            await expect(thumb1).to_have_class("thumbnail-item marked")
+            # 内存中应有该 annotation，status 为 annotated
+            saved_status = await page.evaluate("() => annotations[Object.keys(annotations)[0]]?.annotation?.status")
+            assert saved_status == "annotated", f"保存后 status 应为 annotated，实际: {saved_status}"
+            saved_err_count = await page.evaluate("() => annotations[Object.keys(annotations)[0]]?.annotation?.errors?.length")
+            assert saved_err_count == 1, f"保存应有 1 个 error，实际: {saved_err_count}"
+            print("  ✓ 保存逻辑正确，自动跳转 + status=annotated")
             passed += 1
-            
-            # ============ 测试 7: 跳过逻辑 ============
-            print("\n[测试 7] 跳过逻辑...")
-            # 第二张不做任何操作，直接保存（应为跳过）
-            await save_btn.click()
-            await asyncio.sleep(0.5)
-            
+
+            # 测试 11: 跳过逻辑
+            print("\n[测试 11] 跳过逻辑...")
+            # 当前是第 2 张，未画任何框，点保存=跳过
+            await page.locator("#saveBtn").click()
+            await asyncio.sleep(0.4)
             progress = await page.locator("#progressInfo").text_content()
-            assert "任务 3 / 3" == progress, f"跳过后应到第3张，实际: {progress}"
-            
+            assert "任务 3 / 3" == progress, f"跳过后应到第 3 张，实际: {progress}"
             thumb2 = page.locator(".thumbnail-item").nth(1)
-            await expect(thumb2).not_to_have_class(re.compile("marked"))
-            print("  ✓ 跳过逻辑正确")
+            await expect(thumb2).to_have_class("thumbnail-item skipped")
+            print("  ✓ 跳过逻辑正确，status=skipped")
             passed += 1
-            
-            # ============ 测试 8: 导航功能 ============
-            print("\n[测试 8] 导航功能...")
+
+            # 测试 12: 导航（按钮 + 键盘）
+            print("\n[测试 12] 导航...")
             await page.locator("#prevBtn").click()
             await asyncio.sleep(0.2)
             progress = await page.locator("#progressInfo").text_content()
-            assert "任务 2 / 3" == progress, f"上一张应回到第2张，实际: {progress}"
-            
-            await page.locator("#nextBtn").click()
+            assert "任务 2 / 3" == progress, f"prev 应到第 2 张，实际: {progress}"
+            await page.keyboard.press("ArrowRight")
             await asyncio.sleep(0.2)
             progress = await page.locator("#progressInfo").text_content()
-            assert "任务 3 / 3" == progress, f"下一张应到第3张，实际: {progress}"
-            
-            # 键盘快捷键
-            await page.keyboard.press("ArrowLeft")
-            await asyncio.sleep(0.2)
-            progress = await page.locator("#progressInfo").text_content()
-            assert "任务 2 / 3" == progress, f"左箭头应回到第2张，实际: {progress}"
-            print("  ✓ 导航功能正常（按钮+键盘）")
+            assert "任务 3 / 3" == progress, f"右箭头应到第 3 张，实际: {progress}"
+            print("  ✓ 导航（按钮 + 键盘）正常")
             passed += 1
-            
-            # ============ 测试 9: 导出按钮状态 ============
-            print("\n[测试 9] 导出按钮状态...")
-            export_btn = page.locator("#exportBtn")
-            await expect(export_btn).to_be_enabled()
-            print("  ✓ 有标注数据时导出按钮可用")
+
+            # 测试 13: Esc 取消绘制中
+            print("\n[测试 13] Esc 取消绘制中...")
+            await page.locator(".error-type-btn[data-type-id='ocr']").click()
+            canvas_box = await page.locator("#drawingCanvas").bounding_box()
+            # mousedown 后不 mouseup，按 Esc
+            await page.mouse.move(canvas_box['x'] + 100, canvas_box['y'] + 100)
+            await page.mouse.down()
+            await page.mouse.move(canvas_box['x'] + 200, canvas_box['y'] + 200)
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(0.1)
+            assert not await page.evaluate("() => isDrawingBBox"), "Esc 后 isDrawingBBox 应为 false"
+            await page.mouse.up()  # 清理鼠标状态
+            print("  ✓ Esc 取消绘制中正常")
             passed += 1
-            
-            # ============ 测试 10: 工具切换和清空 ============
-            print("\n[测试 10] 工具切换和清空...")
-            erase_btn = page.locator("#eraseTool")
-            await erase_btn.click()
-            await expect(erase_btn).to_have_class(re.compile("active"))
-            
-            await page.locator('.tool-btn:has-text("清空")').click()
-            is_empty = await page.evaluate("() => isCanvasEmpty()")
-            assert is_empty, "清空后 Canvas 应为空"
-            print("  ✓ 工具切换和清空功能正常")
-            passed += 1
-            
-            # ============ 测试 11: 画笔粗细切换 ============
-            print("\n[测试 11] 画笔粗细切换...")
-            size4 = page.locator('.size-dot[data-size="4"]')
-            await size4.click()
-            await expect(size4).to_have_class(re.compile("active"))
-            
-            size2 = page.locator('.size-dot[data-size="2"]')
-            await expect(size2).not_to_have_class(re.compile("active"))
-            print("  ✓ 画笔粗细切换正常")
-            passed += 1
-            
-            # ============ 测试 12: 画笔颜色切换（蓝色画笔）============
-            print("\n[测试 12] 画笔颜色切换（蓝色画笔）...")
-            redDot = page.locator('.color-dot[data-color="#e74c3c"]')
-            blueDot = page.locator('.color-dot[data-color="#3498db"]')
-            
-            await blueDot.click()
-            await expect(blueDot).to_have_class(re.compile("active"))
-            await expect(redDot).not_to_have_class(re.compile("active"))
-            
-            # 验证 JS 中 brushColor 已切换
-            currentColor = await page.evaluate("() => brushColor")
-            assert currentColor == "#3498db", f"画笔颜色应为蓝色，实际: {currentColor}"
-            
-            await redDot.click()
-            await expect(redDot).to_have_class(re.compile("active"))
-            await expect(blueDot).not_to_have_class(re.compile("active"))
-            print("  ✓ 蓝色画笔切换正常")
-            passed += 1
-            
-            # ============ 测试 13: 视图模式切换（放大/缩小）============
-            print("\n[测试 13] 视图模式切换（放大/缩小）...")
-            zoom_btn = page.locator("#zoomBtn")
+
+            # 测试 14: 视图模式切换
+            print("\n[测试 14] 视图模式切换...")
             container = page.locator("#imageContainer")
             wrapper = page.locator(".canvas-wrapper")
-            
-            # 默认应为适应高度模式
-            await expect(container).not_to_have_class(re.compile("fit-width"))
-            await expect(wrapper).not_to_have_class(re.compile("fit-width"))
-            
-            # 点击放大
-            await zoom_btn.click()
+            await expect(container).not_to_have_class("image-container fit-width")
+            await page.locator("#zoomBtn").click()
             await asyncio.sleep(0.3)
-            await expect(container).to_have_class(re.compile("fit-width"))
-            await expect(wrapper).to_have_class(re.compile("fit-width"))
-            
+            await expect(container).to_have_class("image-container fit-width")
+            await expect(wrapper).to_have_class("canvas-wrapper fit-width")
             zoom_text = await page.locator("#zoomText").text_content()
-            assert "缩小" in zoom_text, f"放大后按钮应显示缩小，实际: {zoom_text}"
-            
-            # 验证 JS 状态
+            assert "缩小" in zoom_text
             current_mode = await page.evaluate("() => imageZoomMode")
-            assert current_mode == "fit-width", f"放大后模式应为 fit-width，实际: {current_mode}"
-            
-            # 点击缩小
-            await zoom_btn.click()
+            assert current_mode == "fit-width", f"模式应为 fit-width，实际: {current_mode}"
+            await page.locator("#zoomBtn").click()
             await asyncio.sleep(0.3)
-            await expect(container).not_to_have_class(re.compile("fit-width"))
-            await expect(wrapper).not_to_have_class(re.compile("fit-width"))
+            await expect(container).not_to_have_class("image-container fit-width")
             print("  ✓ 视图模式切换正常")
             passed += 1
-            
-            # ============ 测试 14: 保存按钮动态文本 ============
-            print("\n[测试 14] 保存按钮动态文本...")
-            # 清空所有选择
-            await page.evaluate("() => { resetSidebar(); clearCanvas(); }")
-            await asyncio.sleep(0.2)
-            
-            btn_text = await save_btn.text_content()
-            assert "跳过" in btn_text, f"无标注时应显示'跳过'，实际: {btn_text}"
-            
-            # 选择原因
-            await page.locator('.reason-btn[data-reason="判题"]').click()
-            btn_text = await save_btn.text_content()
-            assert "保存" in btn_text, f"有标注时应显示'保存'，实际: {btn_text}"
-            print("  ✓ 保存按钮动态文本切换正常")
+
+            # 测试 15: 序列化为 v2 schema 格式
+            print("\n[测试 15] 序列化为 v2 schema...")
+            v2_obj = await page.evaluate("""
+                () => {
+                    const item = taskItems[currentIndex];
+                    return serializeAnnotation(item, {
+                        status: 'annotated',
+                        errors: currentErrors,
+                        startedAt: '2026-06-29T10:00:00Z',
+                        savedAt: '2026-06-29T10:01:00Z',
+                        durationMs: 60000
+                    });
+                }
+            """)
+            assert v2_obj["schema_version"] == "1.0", f"schema_version 错误: {v2_obj.get('schema_version')}"
+            assert v2_obj["image"]["task_id"] == "aabbccdd-1122-3344-5566-77889900aabb"
+            assert v2_obj["annotation"]["annotator_id"] == "default"
+            assert v2_obj["annotation"]["session_id"].startswith("sess_")
+            if len(v2_obj["annotation"]["errors"]) > 0:
+                err = v2_obj["annotation"]["errors"][0]
+                assert "error_id" in err
+                assert err["error_type"] == "ocr"
+                assert err["marks"][0]["role"] == "primary"
+                assert err["marks"][0]["type"] == "bbox"
+            print("  ✓ v2 schema 序列化正确")
             passed += 1
-            
-            # ============ 测试 15: YAML 解析 ============
-            print("\n[测试 15] YAML 解析函数...")
-            try:
-                yaml_text = 'task_ids:\n  - "db45c6d8-04ed-4a71-a7d2-2179957bd9b4"\n  - "second-id-here"'
-                context2 = await browser.new_context(viewport={'width': 800, 'height': 600})
-                page2 = await context2.new_page()
-                await page2.goto(BASE_URL, wait_until="networkidle")
-                result = await page2.evaluate(f"""
-                    () => {{
-                        const text = `{yaml_text}`;
-                        return parseYamlTaskIds(text);
-                    }}
-                """)
-                assert len(result) == 2, f"应解析出2个ID，实际: {len(result)}"
-                assert result[0] == "db45c6d8-04ed-4a71-a7d2-2179957bd9b4"
-                await context2.close()
-                print("  ✓ YAML 解析功能正常")
-                passed += 1
-            except Exception as e:
-                print(f"  ✗ YAML 解析测试失败: {e}")
-                failed += 1
-            
-            # ============ 测试 16: 报告生成 ============
-            print("\n[测试 16] 报告生成功能...")
-            try:
-                context3 = await browser.new_context(viewport={'width': 800, 'height': 600})
-                page3 = await context3.new_page()
-                await page3.goto(BASE_URL, wait_until="networkidle")
-                
-                report = await page3.evaluate("""
-                    () => {
-                        annotations = {
-                            'test-id-1': {
-                                taskId: 'test-id-1',
-                                folderPath: '未匹配/1',
-                                imageName: '1.jpg',
-                                badcaseCount: 2,
-                                reasons: ['切题', 'OCR'],
-                                hasDrawing: true,
-                                timestamp: '2024-01-01T00:00:00Z'
-                            }
-                        };
-                        return generateReport();
-                    }
-                """)
-                assert "批阅标注结果报告" in report
-                assert "test-id-1" in report
-                assert "Badcase: 2 个" in report
-                print("  ✓ 报告生成功能正常")
-                passed += 1
-                await context3.close()
-            except Exception as e:
-                print(f"  ✗ 报告生成测试失败: {e}")
-                failed += 1
+
+            # 测试 16: 导出 ZIP 结构
+            print("\n[测试 16] 导出 ZIP 结构...")
+            # 监听下载
+            async with page.expect_download() as download_info:
+                await page.locator("#exportBtn").click(force=True)
+            download = await download_info.value
+            zip_bytes = await download.path()
+            with zipfile.ZipFile(zip_bytes) as zf:
+                names = zf.namelist()
+                assert any("_session.json" in n for n in names), f"ZIP 应含 _session.json，实际: {names}"
+                assert any("_stats.jsonl" in n for n in names), f"ZIP 应含 _stats.jsonl，实际: {names}"
+                assert any("taxonomy.json" in n for n in names), f"ZIP 应含 taxonomy.json，实际: {names}"
+                assert any("annotations/default.json" in n for n in names), f"ZIP 应含 annotations/default.json，实际: {names}"
+                assert any("source." in n for n in names), f"ZIP 应含 source.* 图片，实际: {names}"
+                # 不应再有 error_info.txt 或 marked_*.jpg
+                assert not any("error_info.txt" in n for n in names), "新格式不应含 error_info.txt"
+                assert not any(n.startswith("marked_") for n in names), "新格式不应含 marked_*.jpg"
+                # 验证 _session.json 内容
+                session_data = json.loads(zf.read("_session.json"))
+                assert session_data["schema_version"] == "1.0"
+                assert session_data["annotator_id"] == "default"
+                assert "status_count" in session_data
+                # 验证 annotations/default.json
+                for n in names:
+                    if n.endswith("annotations/default.json"):
+                        ann_data = json.loads(zf.read(n))
+                        assert ann_data["schema_version"] == "1.0"
+                        assert "errors" in ann_data["annotation"]
+                        assert ann_data["annotation"]["status"] in ("annotated", "skipped")
+                        break
+            print("  ✓ 导出 ZIP 结构正确（无 error_info.txt / marked_*.jpg）")
+            passed += 1
 
         except Exception as e:
             print(f"  ✗ 测试失败: {e}")
             failed += 1
-            # 保存截图用于调试
             await page.screenshot(path="test_failure.png")
             print("  调试截图已保存: test_failure.png")
-        
+
         finally:
             await context.close()
             await browser.close()
-    
+
     server.shutdown()
 
-    # ============ 测试总结 ============
     print("\n" + "=" * 60)
     print(f"测试完成: 通过 {passed} 项, 失败 {failed} 项")
     print("=" * 60)
-    
     if failed > 0:
         sys.exit(1)
     else:

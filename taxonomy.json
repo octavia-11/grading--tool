@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "categories": [
+    {
+      "id": "topic",
+      "label": "切题",
+      "color": "#e74c3c",
+      "subtypes": [
+        { "id": "off_topic", "label": "答非所问" },
+        { "id": "incomplete", "label": "未覆盖要点" }
+      ]
+    },
+    {
+      "id": "ocr",
+      "label": "OCR",
+      "color": "#3498db",
+      "subtypes": [
+        { "id": "char_wrong", "label": "单字识别错" },
+        { "id": "char_missing", "label": "漏字" },
+        { "id": "formula", "label": "公式错" },
+        { "id": "format", "label": "格式/标点" }
+      ]
+    },
+    {
+      "id": "solution",
+      "label": "解题",
+      "color": "#f39c12",
+      "subtypes": [
+        { "id": "logic", "label": "逻辑错" },
+        { "id": "calc", "label": "计算错" },
+        { "id": "formula", "label": "公式错" },
+        { "id": "incomplete", "label": "步骤缺失" }
+      ]
+    },
+    {
+      "id": "judgment",
+      "label": "判题",
+      "color": "#9b59b6",
+      "subtypes": [
+        { "id": "wrong_conclusion", "label": "对错结论错" },
+        { "id": "score_wrong", "label": "分数错" },
+        { "id": "overlook", "label": "漏判" }
+      ]
+    }
+  ],
+  "severity_levels": [1, 2, 3]
+}

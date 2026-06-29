@@ -1,125 +1,123 @@
 # 图片批阅标注工具 + 结果查看工具
 
-本项目包含两个基于浏览器的本地静态网页工具：
+本项目包含两个基于浏览器的本地静态网页工具，配合一个迁移脚本，构成完整的「标注 → 查看 → 分析」数据流：
 
-1. **图片批阅标注工具** — 对批阅任务图片进行标注，支持鼠标勾画、选择 Badcase 数量和错误原因，并将结果打包导出
-**[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
-2. **标注结果查看工具** — 查看标注工具导出的结果，浏览带批注的图片和错误信息，并支持复制任务 ID
-**[https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)**
+1. **图片批阅标注工具** — 用矩形框（bbox）在图片上框选错误位置，每个框绑定一个错误类型和说明。导出结构化 JSON。
+   **[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
+2. **标注结果查看工具** — 浏览标注结果，在原图上叠加 bbox，支持字段级编辑错误列表。
+   **[https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)**
+3. **迁移脚本** `migrate_legacy_zip.py` — 把旧版（marked_*.jpg + error_info.txt）结果迁移到新 schema。
 
 所有数据均在浏览器本地处理，不会上传到任何服务器。
 
+## v2 数据模型（error-centric）
+
+每条错误 = 一个 bbox + 一个错误类型 + 一句说明。坐标存在图像像素空间 `[x, y, w, h]`，与显示分辨率解耦。
+
+导出 ZIP 结构：
+
+```
+批阅标注结果_2026-06-10T12-00-00.zip
+├── _session.json                              # 会话级元数据
+├── _stats.jsonl                               # 派生统计（一行一错误，便于 grep/jq）
+├── taxonomy.json                              # 分类法快照
+├── db45c6d8-04ed-4a71-a7d2-2179957bd9b4/
+│   ├── annotations/
+│   │   └── default.json                       # 真相源（v2 schema）
+│   └── source.jpg                             # 原图（无栅格化痕迹）
+└── bda0718b-3e30-4cc4-93b1-265eb54a86d2/
+    └── ...
+```
+
+`annotations/default.json` 字段定义见 [`docs/schema.md`](docs/schema.md)。
+
+### 为什么不再有 `error_info.txt` 和 `marked_*.jpg`
+
+- 自由文本不可结构化分析（grep、jq、SQL 都做不了）
+- 栅格化把位置信息烧死在像素里，无法分离错误对象和原图
+- v2 把它们改成派生视图：原图是真相源，bbox overlay 由 viewer 实时绘制
+
+旧数据不会被丢弃——viewer 自动兼容旧格式（双路解析），迁移脚本可以把它们升级到 v2。
+
 ## 功能特性
 
-### 标注工具功能
+### 标注工具
 
-- 🖼️ **自动识别任务结构**：选择批阅任务文件夹后，自动匹配图片与 `metadata.yaml` 中的任务编号
-- ✏️ **红笔/蓝笔勾画标记**：直接在图片上绘制痕迹，支持画笔、橡皮擦、线条粗细调节
-- 🔢 **Badcase 数量**：提供 1、2 快捷按钮，也支持自定义输入
-- 🏷️ **错误原因分类**：切题、OCR、解题、判题，四类原因支持多选
-- 💾 **保存/跳过合一**：有标注信息则保存，无标注则跳过，自动跳转下一张
-- 📦 **一键导出 ZIP**：按任务编号命名文件夹，输出带痕迹的图片和错误信息文本
-- 🔍 **图片缩放模式**：适应高度（一屏看全图）/ 适应宽度（横向铺满，纵向滚动）
-- ⌨️ **键盘快捷键支持**：提升标注效率
+- 🖼️ **任务结构自动识别**：从 `metadata.yaml` 匹配任务编号
+- 🟦 **bbox 框选标注**：左键拖拽框选错误位置，自动绑定预选的错误类型
+- 🏷️ **数据驱动分类**：4 大类（切题/OCR/解题/判题）+ 子类型，由 `taxonomy.js` 配置
+- 💬 **逐错误备注**：每个 bbox 一条 comment
+- ↩️ **撤销/删除**：Z 撤销最后一个，Delete 删选中，Esc 取消绘制
+- 🔢 **Badcase 数量自洽**：错误数 = bbox 数，杜绝对不上账
+- 💾 **localStorage 增量持久化**：刷新不丢，启动时提示恢复未导出标注
+- 🔐 **sha256 完整性校验**：每张原图算 hash，写入 annotation.json（file:// 失败则置 null）
+- 📦 **纯 JSON 导出**：每图一份 `annotations/default.json` + 原图，不再栅格化
 
-### 结果查看工具功能
+### 结果查看工具
 
-- 📂 **导入结果文件夹**：直接选择标注工具导出的 ZIP 解压后的文件夹
-- 🖼️ **查看带批注图片**：清晰展示每张 marked_ 图片
-- 📋 **查看错误信息**：Badcase 数量、错误原因、文件夹路径等详细信息
-- 📋 **一键复制任务 ID**：点击复制按钮即可复制任务编号到剪贴板
-- ✏️ **原始报告可编辑 + 实时自动保存**：右侧「原始报告」支持就地编辑，输入即自动保存到当前会话和浏览器本地（刷新页面也不丢）；需要写回磁盘时点击「💾 下载」可生成新的 `error_info.txt` 替换原文件
-- 🔍 **图片缩放支持**：适应高度 / 适应宽度两种查看模式
-- 🙈 **浮动导航可隐藏**：右侧 ↑/🔍/↓ 浮动按钮支持一键折叠，需要时点 handle 恢复
-- ⌨️ **键盘导航**：上下箭头快速切换任务
+- 📂 **双路解析**：v2 JSON 优先，自动回退到 legacy txt
+- 🟦 **bbox overlay**：在原图上实时叠加 bbox 矩形，颜色按错误类型分类，带角标序号
+- ✏️ **字段级编辑**：每个错误独立编辑（类型下拉 + 子类型联动 + comment），不再是自由文本
+- 💾 **JSON 导出**：编辑后下载 `annotation.json`（File System Access API 优先，回退普通下载）
+- 🔄 **localStorage 跨会话保留**：旧 key（`gradingReport:`）自动迁移到 `gradingAnnotationV2:`
+- ⌨️ **键盘导航**：上下箭头切换任务（输入框中自动失效）
+- 🙈 **浮动导航可折叠**
 
 ## 🚀 在线使用（推荐）
 
 两个工具均已通过 **GitHub Pages** 部署，无需下载安装：
 
-### 标注工具
-👉 **[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
+- **标注工具** 👉 [https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)
+- **结果查看工具** 👉 [https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)
 
-### 结果查看工具
-👉 **[https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)**
-
-> 注意：所有图片和数据均在浏览器本地处理，不会上传到任何服务器。
+> 所有图片和数据均在浏览器本地处理，不会上传到任何服务器。
 
 ## 快速开始
 
 ### 环境要求
 
 - 现代浏览器（推荐 Chrome / Edge / Safari）
-- 不需要安装任何后端服务或依赖
+- 不需要后端服务
 
 ### 部署方式
 
-本工具是单个 HTML 文件，部署非常简单：
-
 #### 方式一：在线使用（推荐）
 
-- **标注工具**： [https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)
-- **结果查看工具**： [https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)
+直接打开上面两个 GitHub Pages 链接即可。
 
-1. 打开对应工具页面
-2. 点击「选择文件夹」按钮
-3. 选择对应文件夹即可使用
+#### 方式二：本地打开
 
-#### 方式二：直接本地打开
+1. 下载仓库中的 `annotation-tool.html`、`result-viewer.html`、`taxonomy.js`
+2. **三个文件必须放在同一目录**（taxonomy.js 通过 `<script>` 标签加载，file:// 下不可用 fetch）
+3. 用浏览器双击打开
 
-1. 下载仓库中的 `annotation-tool.html` 或 `result-viewer.html`
-2. 用浏览器直接双击打开该文件
-3. 点击「选择文件夹」按钮即可
-
-#### 方式三：通过本地 HTTP 服务器访问
-
-如果你希望更稳定的本地访问体验，可以启动一个静态文件服务器：
+#### 方式三：本地 HTTP 服务器
 
 ```bash
-# 进入项目目录
 cd grading-image-annotation-tool
-
-# Python 3
 python3 -m http.server 8080
-
-# 或用 Node.js
-npx serve .
+# 访问 http://localhost:8080/annotation-tool.html
 ```
-
-然后在浏览器访问 `http://localhost:8080/annotation-tool.html`
 
 #### 方式四：部署到任意静态网站托管服务
 
-由于本工具是纯前端静态页面，可以部署到：
-
-- GitHub Pages
-- Vercel
-- Netlify
-- 任意 Nginx / Apache 静态站点
-
-只需将 `annotation-tool.html` 上传到托管服务即可。
+GitHub Pages / Vercel / Netlify / 任意 Nginx 静态站点均可。
 
 ## 使用说明
 
 ### 1. 准备批阅任务文件夹
 
-确保你的文件夹结构如下：
-
 ```
 批阅任务文件夹/
 ├── 未匹配/
 │   ├── 1/
-│   │   ├── 1.jpg              # 任务图片
+│   │   ├── 1.jpg
 │   │   └── metadata.yaml      # 包含 task_ids
-│   ├── 2/
-│   │   ├── 2.jpg
-│   │   └── metadata.yaml
 │   └── ...
 └── 学生卷/
-    ├── 张三/
-    │   ├── 张三.jpg
-    │   └── metadata.yaml
-    └── ...
+    └── 张三/
+        ├── 张三.jpg
+        └── metadata.yaml
 ```
 
 `metadata.yaml` 内容示例：
@@ -131,122 +129,140 @@ task_ids:
 
 ### 2. 加载任务
 
-1. 打开工具页面
-2. 点击左上角「📁 选择文件夹」按钮
-3. 在弹出的文件选择器中，选中**批阅任务文件夹**（最外层文件夹）
-4. 工具会自动扫描所有子文件夹，匹配图片与 YAML 文件
+1. 打开标注工具页面
+2. 点击「📁 选择文件夹」，选择批阅任务文件夹（最外层）
+3. 工具自动扫描子文件夹，匹配图片与 YAML
 
 ### 3. 进行标注
 
-#### 左侧标记栏
-
-- **Badcase 数量**：点击 `1` 或 `2`，或在输入框中填入具体数字
-- **错误原因**：点击对应按钮可多选，支持 `切题`、`OCR`、`解题`、`判题`
-
-#### 右侧图片区域
-
-- **画笔**：按住鼠标左键在图片上拖动，绘制红笔痕迹
-- **橡皮**：擦除已绘制的痕迹
-- **粗细**：选择 2px / 4px / 6px 三种线条粗细
-- **清空**：清除当前图片上的所有痕迹
+1. 在左侧 taxonomy 选择器点击错误类型（如「切题」→「答非所问」）
+2. 在图片上左键拖拽框选错误位置（框太小会被忽略）
+3. 框选完成后在左侧错误列表填写 comment
+4. 一个图可以画多个 bbox，每个绑定不同的错误类型
+5. Z 撤销最后一个，Delete 删选中，Esc 取消绘制中
 
 ### 4. 保存或跳过
 
-- 如果你进行了任何标注（勾画 / 选择数量 / 选择原因），点击「✓ 保存标注」
-- 如果当前图片没有问题、不需要标注，直接点击「→ 跳过此图」（按钮会根据当前状态自动切换文字）
-- 保存后会自动跳转到下一张图片
+- 「✓ 保存标注」（有 bbox 时）— 保存并自动跳到下一张
+- 「→ 跳过此图」（无 bbox 时）— 标记 skipped 并跳过
 
 ### 5. 导出结果
 
-完成所有标注后，点击右上角「📦 导出结果」按钮，会下载一个 ZIP 文件，结构如下：
+点击右上角「📦 导出结果」下载 ZIP（结构见上文「v2 数据模型」）。
 
-```
-批阅标注结果_2026-06-10T12-00-00.zip
-├── db45c6d8-04ed-4a71-a7d2-2179957bd9b4/    # 以任务编号命名的文件夹
-│   ├── marked_1.jpg                          # 带有红笔勾画痕迹的图片
-│   ├── error_info.txt                        # 错误信息文本
-│   └── task_id.txt                           # 任务编号
-├── bda0718b-3e30-4cc4-93b1-265eb54a86d2/
-│   └── ...
-└── 标注报告.txt                               # 总标注统计报告
-```
+### 6. 用查看工具浏览
 
-`error_info.txt` 示例：
+1. 解压 ZIP（或直接选择解压目录）
+2. 打开 `result-viewer.html`
+3. 「选择文件夹」→ 选中解压后的目录
+4. 工具自动加载，左侧任务列表 + 中间图片（带 bbox overlay）+ 右侧错误详情
+5. 「✏️ 编辑」可字段级编辑错误列表（添加/删除/改类型/改 comment）
+6. 「💾 下载」生成新的 `annotation.json`（Chrome/Edge 可直接覆盖原文件）
 
-```
-任务编号: db45c6d8-04ed-4a71-a7d2-2179957bd9b4
-文件夹: 未匹配/1
-图片名称: 1.jpg
-标注时间: 2026-06-10T12:00:00.000Z
+## 旧数据迁移
 
-Badcase 数量: 2
-错误原因: 切题, OCR
+如果你有旧版的 `marked_*.jpg + error_info.txt` 结果，用迁移脚本升级到 v2：
 
---- 详细信息 ---
-是否有勾画痕迹: 是
+```bash
+# 目录形式（就地迁移）
+python3 migrate_legacy_zip.py 批阅标注结果_xxx/
+
+# ZIP 形式（输出新 ZIP）
+python3 migrate_legacy_zip.py 批阅标注结果_xxx.zip --output result_v2.zip
+
+# 干跑（只打印 diff，不写盘）
+python3 migrate_legacy_zip.py 批阅标注结果_xxx/ --dry-run
 ```
 
-### 6. 使用结果查看工具浏览标注结果
+迁移行为：
 
-1. 将导出的 ZIP 文件解压到本地
-2. 打开 **结果查看工具**（`result-viewer.html`）
-3. 点击「选择文件夹」，选中解压后的**标注结果文件夹**
-4. 工具会自动扫描所有任务子文件夹，展示带批注的图片和错误信息
-5. 左侧任务列表点击切换不同任务，右侧信息面板展示详细信息
-6. 点击任务编号旁的「复制」按钮即可复制任务 ID
-7. 如需修改某任务的报告：在右侧「原始报告」区域点击「✏️ 编辑」直接修改文本，内容会**实时自动保存**到当前会话和浏览器本地（无需点保存按钮，刷新或重开页面也不丢）。需要写回磁盘时点击「💾 下载」生成新的 `error_info.txt`，在支持的浏览器（Chrome/Edge）中可直接覆盖原文件。完成后点「✅ 完成」退出编辑模式
+- `marked_*.jpg` → 复制为 `source.<ext>`
+- `error_info.txt` 的 reasons → 映射到 taxonomy 的 category id，写入 `annotations/default.json`
+- **bbox 字段为 null**（位置信息已栅格化、无法恢复），comment 标注「历史数据，位置信息未保留」
+- 删除 `error_info.txt` 和 `task_id.txt`（信息已进 JSON）
+- 计算 `source.<ext>` 的 sha256
+
+reason → category 映射见 `reason_map.yaml`。
+
+## 分类法自定义
+
+`taxonomy.json` / `taxonomy.js` 定义错误分类。修改后两个工具会同步使用新分类（annotation-tool 用 .js 因为 file:// 不支持 fetch，viewer 同理）。
+
+```json
+{
+  "version": "1.0",
+  "categories": [
+    {"id": "topic", "label": "切题", "color": "#e74c3c", "subtypes": [
+      {"id": "off_topic", "label": "答非所问"},
+      {"id": "incomplete", "label": "未覆盖要点"}
+    ]},
+    {"id": "ocr", "label": "OCR", "color": "#3498db", "subtypes": [...]},
+    {"id": "solution", "label": "解题", "color": "#f39c12", "subtypes": [...]},
+    {"id": "judgment", "label": "判题", "color": "#9b59b6", "subtypes": [...]}
+  ],
+  "severity_levels": [1, 2, 3]
+}
+```
+
+修改后两个文件需保持同步（taxonomy.js 是 `window.TAXONOMY = {...}` 包装版）。
 
 ## 快捷键
 
-### 标注工具快捷键
+### 标注工具
 
 | 快捷键 | 功能 |
 |--------|------|
 | `←` `→` | 上一张 / 下一张图片 |
-| `S` / `Enter` | 保存标注 / 跳过此图 |
+| `Z` | 撤销最后一个 bbox |
+| `Delete` | 删除选中的 bbox |
+| `Esc` | 取消绘制中 |
+| `S` / `Enter` | 保存 / 跳过 |
 
-### 结果查看工具快捷键
+### 结果查看工具
 
 | 快捷键 | 功能 |
 |--------|------|
-| `↑` `↓` | 上一个 / 下一个任务 |
-| `←` `→` | 上一个 / 下一个任务 |
+| `↑` `↓` `←` `→` | 切换任务（输入框中失效） |
 
 ## 浏览器兼容性
 
-- ✅ Chrome / Edge（推荐）
+- ✅ Chrome / Edge（推荐，File System Access API 直接覆盖原文件）
 - ✅ Safari
-- ✅ Firefox
+- ✅ Firefox（部分 API 降级）
 
-> 注意：由于浏览器安全策略，本工具通过 JavaScript 读取本地文件夹并导出 ZIP，所有数据处理均在浏览器本地完成，不会上传到任何服务器。
+> 注意：file:// 下双击打开时，sha256 计算（SubtleCrypto）可能不可用，annotation.json 的 `source_hash` 字段会置 null，不阻塞导出。
 
 ## 文件说明
 
 | 文件 | 说明 |
 |------|------|
-| `annotation-tool.html` | **标注工具**主页面，独立可运行 |
-| `result-viewer.html` | **结果查看工具**主页面，独立可运行 |
-| `test_annotation_tool.py` | 标注工具 Playwright 自动化测试脚本（16 项测试） |
-| `test_result_viewer.py` | 结果查看工具 Playwright 自动化测试脚本（10 项测试） |
-| `test_data/` | 标注工具测试数据 |
-| `test_results/` | 结果查看工具测试数据（模拟导出结果） |
-| `annotation-tool-prototype.html` | 早期 UI 原型页面 |
+| `annotation-tool.html` | **标注工具**主页面 |
+| `result-viewer.html` | **结果查看工具**主页面 |
+| `taxonomy.json` / `taxonomy.js` | 错误分类法（数据 + file:// 兼容包装） |
+| `docs/schema.md` | annotation.json 字段定义 |
+| `migrate_legacy_zip.py` | 旧 ZIP/目录 → v2 schema 迁移脚本 |
+| `reason_map.yaml` | 旧 reasons → 新 category id 映射 |
+| `test_annotation_tool.py` | 标注工具 Playwright 测试（16 项） |
+| `test_result_viewer.py` | 查看工具 Playwright 测试（14 项） |
+| `test_viewer_e2e.py` | 查看工具端到端测试（5 项，含 v2 + legacy 双路径） |
+| `test_migration.py` | 迁移脚本单元测试（7 项） |
+| `test_data/v2_sample/` | v2 schema 样本（含 source.jpg + annotations/default.json） |
+| `test_results/` | 旧版样本（用于测试 legacy 兼容路径） |
 | `README.md` | 本说明文件 |
 
 ## 运行测试
 
-如果你想验证工具功能是否正常，可以运行自动化测试：
-
 ```bash
-# 安装 Playwright for Python
+# 安装 Playwright
 pip3 install playwright
 python3 -m playwright install chromium
 
-# 运行测试
-python3 test_annotation_tool.py
+# 跑全部测试
+python3 test_annotation_tool.py        # 16 项
+python3 test_result_viewer.py          # 14 项
+python3 test_viewer_e2e.py             # 5 项（真实文件解析）
+python3 test_migration.py              # 7 项（无浏览器依赖）
 ```
-
-测试将自动启动本地 HTTP 服务器，并通过无头浏览器完成 14 项功能测试。
 
 ## 许可证
 

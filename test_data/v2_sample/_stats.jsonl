@@ -1,0 +1,2 @@
+{"task_id":"db45c6d8-04ed-4a71-a7d2-2179957bd9b4","image":"1.jpg","error_id":"err_01","error_type":"ocr","subtype":"char_wrong","bbox":[120,100,80,60],"comment":"把 7 识别成 1","annotator_id":"default","severity":null,"duration_ms":3200,"saved_at":"2026-06-29T10:02:00.000Z"}
+{"task_id":"db45c6d8-04ed-4a71-a7d2-2179957bd9b4","image":"1.jpg","error_id":"err_02","error_type":"solution","subtype":"calc","bbox":[300,250,200,120],"comment":"加法进位错","annotator_id":"default","severity":null,"duration_ms":4000,"saved_at":"2026-06-29T10:02:00.000Z"}

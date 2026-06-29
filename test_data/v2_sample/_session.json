@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "session_id": "sess_v2_sample",
+  "annotator_id": "default",
+  "annotator_name": null,
+  "source_folder": "未匹配/",
+  "started_at": "2026-06-29T09:58:00.000Z",
+  "ended_at": "2026-06-29T10:02:00.000Z",
+  "total_images": 1,
+  "status_count": { "annotated": 1, "skipped": 0, "pending": 0 },
+  "error_type_count": { "ocr": 1, "solution": 1 },
+  "images": [
+    {
+      "task_id": "db45c6d8-04ed-4a71-a7d2-2179957bd9b4",
+      "source_path": "未匹配/1/1.jpg",
+      "status": "annotated",
+      "error_count": 2,
+      "annotation_file": "db45c6d8-04ed-4a71-a7d2-2179957bd9b4/annotations/default.json"
+    }
+  ]
+}

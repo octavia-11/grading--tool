@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>标注结果查看工具</title>
+    <script src="taxonomy.js"></script>
     <style>
         * {
             margin: 0;
@@ -30,6 +31,8 @@
             justify-content: space-between;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             flex-shrink: 0;
+            position: relative;
+            z-index: 100;
         }
 
         .header h1 {
@@ -277,6 +280,18 @@
             max-height: none;
         }
 
+        /* bbox overlay canvas: 内部分辨率 = naturalWidth/Height，
+           CSS 100% 拉伸以匹配被缩放后的 <img>，否则 bbox 会错位 */
+        .bbox-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: block;
+        }
+
         .image-nav {
             position: fixed;
             right: 0;
@@ -409,7 +424,7 @@
 
         /* 右侧信息面板 */
         .info-panel {
-            width: 320px;
+            width: 360px;
             background: white;
             border-left: 1px solid #e8e8e8;
             display: flex;
@@ -519,25 +534,187 @@
             background: #27ae60;
         }
 
-        .info-text-block {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 14px;
-            font-size: 13px;
-            line-height: 1.7;
-            color: #555;
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 300px;
-            overflow-y: auto;
+        /* 错误列表 */
+        .error-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 8px;
         }
 
-        /* 原始报告编辑器 */
-        .report-title-bar {
+        .error-card {
+            background: #f8f9fa;
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 12px;
+            position: relative;
+        }
+
+        .error-card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+        }
+
+        .error-card-index {
+            font-size: 12px;
+            font-weight: 700;
+            color: #888;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 50%;
+            width: 22px;
+            height: 22px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .error-type-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+            flex: 1;
+            text-align: center;
+            margin: 0 8px;
+        }
+
+        .error-subtype-text {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .error-comment {
+            font-size: 13px;
+            color: #333;
+            line-height: 1.5;
+            background: white;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-top: 6px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .error-bbox-info {
+            font-size: 11px;
+            color: #999;
+            font-family: monospace;
+            margin-top: 4px;
+        }
+
+        .error-bbox-info.empty {
+            color: #e67e22;
+            font-style: italic;
+            font-family: inherit;
+        }
+
+        .error-delete-btn {
+            background: transparent;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .error-delete-btn:hover {
+            color: #e74c3c;
+        }
+
+        /* 字段级编辑器 */
+        .error-edit-row {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #f8f9fa;
+            border: 1px solid #667eea;
+            border-radius: 8px;
+            padding: 12px;
+            position: relative;
+        }
+
+        .error-edit-row .row-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .error-edit-row .row-header .error-card-index {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .error-edit-row select,
+        .error-edit-row input,
+        .error-edit-row textarea {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            color: #333;
+            background: white;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .error-edit-row select:focus,
+        .error-edit-row input:focus,
+        .error-edit-row textarea:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.12);
+        }
+
+        .error-edit-row textarea {
+            min-height: 60px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        .error-edit-row .field-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .error-edit-row .field-row > * {
+            flex: 1;
+        }
+
+        .error-edit-row .row-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            color: #888;
+        }
+
+        .add-error-btn {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            background: white;
+            border: 1px dashed #667eea;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .add-error-btn:hover {
+            background: #f0f2ff;
+            border-style: solid;
         }
 
         .report-toolbar {
@@ -580,62 +757,11 @@
             background: #fff5f5;
         }
 
-        .report-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        .report-editor {
-            width: 100%;
-            min-height: 220px;
-            padding: 12px;
-            border: 1px solid #667eea;
-            border-radius: 8px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            font-size: 13px;
-            line-height: 1.7;
-            color: #333;
-            resize: vertical;
-            background: #fdfdff;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
-            max-height: 400px;
-        }
-
-        .report-editor:focus {
-            border-color: #764ba2;
-            box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.18);
-        }
-
-        .report-hint {
-            font-size: 11px;
-            color: #999;
-            margin-top: 6px;
-            line-height: 1.5;
-        }
-
-        .report-hint .warn {
-            color: #e67e22;
-        }
-
-        .reason-tags {
+        .report-title-bar {
             display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
-        .reason-tag {
-            padding: 4px 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-
-        .reason-tag.empty {
-            background: #e0e0e0;
-            color: #999;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
         }
 
         .badcase-badge {
@@ -672,6 +798,27 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+        }
+
+        /* schema 来源标记 */
+        .source-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .source-tag.v2 {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .source-tag.legacy {
+            background: #fff3e0;
+            color: #e65100;
         }
 
         /* 隐藏文件输入 */
@@ -776,7 +923,7 @@
         <div class="empty-state" id="emptyState">
             <div class="empty-state-icon">📂</div>
             <h2>欢迎使用标注结果查看工具</h2>
-            <p>请选择一个由「图片批阅标注工具」导出的结果文件夹<br>文件夹结构示例：批阅标注结果_xxx / 任务编号 / (marked_图片 + error_info.txt)</p>
+            <p>请选择一个由「图片批阅标注工具」导出的结果文件夹<br>新格式：&lt;task_id&gt;/annotations/default.json + source.&lt;ext&gt;<br>旧格式：&lt;task_id&gt;/(marked_*.jpg + error_info.txt)（自动兼容）</p>
             <button class="folder-select-btn" onclick="selectFolder()">选择标注结果文件夹</button>
         </div>
 
@@ -794,7 +941,8 @@
         <div class="image-area" id="imageArea" style="display:none;">
             <div class="image-wrapper" id="imageWrapper">
                 <div class="image-box" id="imageBox">
-                    <img id="previewImage" src="" alt="带批注图片" draggable="false">
+                    <img id="previewImage" src="" alt="原图" draggable="false">
+                    <canvas id="bboxOverlay" class="bbox-overlay"></canvas>
                 </div>
             </div>
         </div>
@@ -831,14 +979,97 @@
     </div>
 
     <script>
+        // ============ 常量 ============
+        const SCHEMA_VERSION = '1.0';
+        const ANNOTATOR_ID = 'default';
+        const STORAGE_PREFIX_V2 = 'gradingAnnotationV2:';
+        const STORAGE_PREFIX_LEGACY = 'gradingReport:';
+        const STORAGE_DEBOUNCE_MS = 400;
+
+        // ============ taxonomy ============
+        let taxonomy = null;
+        function loadTaxonomy() {
+            if (window.TAXONOMY && Array.isArray(window.TAXONOMY.categories)) {
+                taxonomy = window.TAXONOMY;
+                return;
+            }
+            taxonomy = {
+                version: '1.0',
+                categories: [
+                    { id: 'topic', label: '切题', color: '#e74c3c', subtypes: [
+                        { id: 'off_topic', label: '答非所问' },
+                        { id: 'incomplete', label: '未覆盖要点' }
+                    ]},
+                    { id: 'ocr', label: 'OCR', color: '#3498db', subtypes: [
+                        { id: 'char_wrong', label: '单字识别错' },
+                        { id: 'char_missing', label: '漏字' },
+                        { id: 'formula', label: '公式错' },
+                        { id: 'format', label: '格式/标点' }
+                    ]},
+                    { id: 'solution', label: '解题', color: '#f39c12', subtypes: [
+                        { id: 'logic', label: '逻辑错' },
+                        { id: 'calc', label: '计算错' },
+                        { id: 'formula', label: '公式错' },
+                        { id: 'incomplete', label: '步骤缺失' }
+                    ]},
+                    { id: 'judgment', label: '判题', color: '#9b59b6', subtypes: [
+                        { id: 'wrong_conclusion', label: '对错结论错' },
+                        { id: 'score_wrong', label: '分数错' },
+                        { id: 'overlook', label: '漏判' }
+                    ]}
+                ],
+                severity_levels: [1, 2, 3]
+            };
+            console.warn('taxonomy.js 加载失败，使用内置分类');
+        }
+
+        function getCategory(typeId) {
+            return taxonomy.categories.find(c => c.id === typeId);
+        }
+
+        function getSubtypeLabel(typeId, subtypeId) {
+            const cat = getCategory(typeId);
+            if (!cat) return subtypeId || '-';
+            const s = cat.subtypes.find(x => x.id === subtypeId);
+            return s ? s.label : (subtypeId || '-');
+        }
+
+        function getCategoryColor(typeId) {
+            const cat = getCategory(typeId);
+            return cat ? cat.color : '#888';
+        }
+
+        function getCategoryLabel(typeId) {
+            const cat = getCategory(typeId);
+            return cat ? cat.label : typeId;
+        }
+
+        // 旧文本 reasons -> category id
+        function mapReasonToCategoryId(reason) {
+            const r = (reason || '').trim();
+            if (r === '切题') return 'topic';
+            if (r === 'OCR') return 'ocr';
+            if (r === '解题') return 'solution';
+            if (r === '判题') return 'judgment';
+            // 模糊匹配
+            if (r.includes('题') && !r.includes('解') && !r.includes('判')) return 'topic';
+            if (r.toUpperCase().includes('OCR')) return 'ocr';
+            if (r.includes('解')) return 'solution';
+            if (r.includes('判')) return 'judgment';
+            return null;
+        }
+
         // ============ 全局状态 ============
-        let resultItems = [];    // 所有结果项 [{taskId, folderName, imageFile, imageUrl, errorInfo}]
+        let resultItems = [];
         let currentIndex = 0;
-        let zoomMode = 'fit-height'; // 'fit-height' | 'fit-width'
+        let zoomMode = 'fit-height';
+        let autoSaveTimer = null;
 
         // ============ DOM 元素 ============
         const folderInput = document.getElementById('folderInput');
         const img = document.getElementById('previewImage');
+        const bboxOverlay = document.getElementById('bboxOverlay');
+        const bboxCtx = bboxOverlay.getContext('2d');
 
         // ============ 文件夹选择 ============
         function selectFolder() {
@@ -872,75 +1103,144 @@
             folderInput.value = '';
         });
 
-        // ============ 解析结果文件夹 ============
+        // ============ 解析结果文件夹（双路：JSON 优先 + 旧 txt 回退） ============
         async function parseResultFolder(files) {
             resultItems = [];
 
-            // 按路径分组
+            // 按路径分组。新格式：<root>/<task_id>/annotations/default.json + source.<ext>
+            // 旧格式：<root>/<task_id>/(marked_*.jpg + error_info.txt)
             const dirMap = {};
             for (const file of files) {
                 const parts = file.webkitRelativePath.split('/');
-                // parts[0] = 根文件夹名 (如 "批阅标注结果_2026...")
-                // parts[1] = 任务编号文件夹
-                // parts[2] = 文件
                 if (parts.length < 3) continue;
 
                 const taskFolder = parts[1];
-                const fileName = parts[parts.length - 1];
-
                 if (!dirMap[taskFolder]) {
                     dirMap[taskFolder] = { files: [], folderName: taskFolder };
                 }
                 dirMap[taskFolder].files.push(file);
             }
 
-            // 处理每个任务文件夹
             for (const key in dirMap) {
                 const dir = dirMap[key];
-                
-                // 查找图片文件（marked_ 开头）
-                const imageFile = dir.files.find(f => 
-                    f.name.startsWith('marked_') && isImageFile(f.name)
-                );
-                
-                // 查找 error_info.txt
-                const errorInfoFile = dir.files.find(f => f.name === 'error_info.txt');
-                
-                // 查找 task_id.txt
-                const taskIdFile = dir.files.find(f => f.name === 'task_id.txt');
-
-                if (!imageFile) continue;
-
-                // 读取 error_info.txt
-                let errorInfo = {};
-                if (errorInfoFile) {
-                    const text = await readFileAsText(errorInfoFile);
-                    errorInfo = parseErrorInfo(text);
-                    errorInfo._raw = text;
-                }
-
-                // 读取 task_id.txt（如果 error_info 中没有 taskId）
-                let taskId = errorInfo.taskId || key;
-                if (taskIdFile && !errorInfo.taskId) {
-                    taskId = (await readFileAsText(taskIdFile)).trim();
-                }
-
-                const imageUrl = URL.createObjectURL(imageFile);
-
-                resultItems.push({
-                    taskId,
-                    folderName: dir.folderName,
-                    imageFile,
-                    imageUrl,
-                    imageName: imageFile.name,
-                    errorInfo
-                });
+                const item = await parseDirToItem(dir);
+                if (item) resultItems.push(item);
             }
 
-            // 保持原始顺序
-
-            // 应用上次会话保留下来的本地编辑
             applyLocalEdits();
+        }
+
+        async function parseDirToItem(dir) {
+            // 新格式优先
+            const jsonFile = dir.files.find(f => f.name === 'default.json' && f.webkitRelativePath.includes('/annotations/'));
+            if (jsonFile) {
+                try {
+                    const text = await readFileAsText(jsonFile);
+                    const data = JSON.parse(text);
+                    return await buildItemFromV2Json(data, dir);
+                } catch (err) {
+                    console.warn('JSON 解析失败，回退到旧格式:', err, dir.folderName);
+                }
+            }
+
+            // 旧格式回退
+            const imageFile = dir.files.find(f =>
+                (f.name.startsWith('marked_') || f.name.startsWith('source.')) && isImageFile(f.name)
+            );
+            const errorInfoFile = dir.files.find(f => f.name === 'error_info.txt');
+            const taskIdFile = dir.files.find(f => f.name === 'task_id.txt');
+
+            if (!imageFile) return null;
+
+            let legacyInfo = {};
+            if (errorInfoFile) {
+                const text = await readFileAsText(errorInfoFile);
+                legacyInfo = parseErrorInfo(text);
+                legacyInfo._raw = text;
+            }
+
+            let taskId = legacyInfo.taskId || dir.folderName;
+            if (taskIdFile && !legacyInfo.taskId) {
+                taskId = (await readFileAsText(taskIdFile)).trim();
+            }
+
+            const imageUrl = URL.createObjectURL(imageFile);
+            return buildItemFromLegacy(taskId, dir.folderName, imageFile, imageUrl, legacyInfo);
+        }
+
+        async function buildItemFromV2Json(data, dir) {
+            // 定位 source.<ext>
+            const sourceFile = dir.files.find(f => /^source\./i.test(f.name) && isImageFile(f.name));
+            // 没有就找 marked_*.jpg 旧图
+            const fallbackImage = sourceFile || dir.files.find(f => f.name.startsWith('marked_') && isImageFile(f.name));
+            const imageUrl = fallbackImage ? URL.createObjectURL(fallbackImage) : '';
+            const taskId = (data.image && data.image.task_id) || dir.folderName;
+
+            // 深拷贝 annotation，保持后续编辑不影响原始数据
+            const annotation = JSON.parse(JSON.stringify(data.annotation || { status: 'pending', errors: [] }));
+
+            return {
+                taskId,
+                folderName: dir.folderName,
+                imageName: fallbackImage ? fallbackImage.name : '',
+                imageFile: fallbackImage || null,
+                imageUrl,
+                schemaVersion: data.schema_version || '1.0',
+                source: 'v2',
+                annotation
+            };
+        }
+
+        function buildItemFromLegacy(taskId, folderName, imageFile, imageUrl, legacyInfo) {
+            const reasons = legacyInfo.reasons || [];
+            // 把 reasons 映射为 errors（bbox 信息丢失）
+            const errors = reasons.map((r, i) => {
+                const typeId = mapReasonToCategoryId(r);
+                return {
+                    error_id: `legacy_${String(i + 1).padStart(2, '0')}`,
+                    error_type: typeId || 'topic',
+                    error_subtype: null,
+                    severity: null,
+                    comment: `（历史数据，位置信息未保留，迁移自 error_info.txt）`,
+                    marks: [{
+                        mark_id: `legacy_m_${i + 1}`,
+                        role: 'primary',
+                        type: 'bbox',
+                        geometry: { bbox: null, points: null },
+                        color: getCategoryColor(typeId || 'topic'),
+                        width: 2
+                    }],
+                    annotator_id: 'legacy',
+                    created_at: legacyInfo.timestamp || null,
+                    updated_at: legacyInfo.timestamp || null,
+                    duration_ms: null
+                };
+            });
+
+            return {
+                taskId,
+                folderName,
+                imageName: imageFile.name,
+                imageFile,
+                imageUrl,
+                schemaVersion: 'legacy',
+                source: 'legacy',
+                annotation: {
+                    status: errors.length > 0 ? 'annotated' : 'pending',
+                    errors,
+                    session_id: null,
+                    annotator_id: 'legacy',
+                    started_at: legacyInfo.timestamp || null,
+                    saved_at: legacyInfo.timestamp || null,
+                    _legacy: {
+                        folderPath: legacyInfo.folderPath,
+                        timestamp: legacyInfo.timestamp,
+                        hasDrawing: legacyInfo.hasDrawing,
+                        badcaseCount: legacyInfo.badcaseCount,
+                        reasons: legacyInfo.reasons
+                    }
+                }
+            };
         }
 
         function isImageFile(name) {
@@ -960,16 +1260,16 @@
         function parseErrorInfo(text) {
             const info = {};
             const lines = text.split('\n');
-            
+
             for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed || trimmed.startsWith('---')) continue;
-                
+
                 const colonIndex = trimmed.indexOf(':');
                 if (colonIndex > 0) {
                     const key = trimmed.substring(0, colonIndex).trim();
                     const value = trimmed.substring(colonIndex + 1).trim();
-                    
+
                     switch(key) {
                         case '任务编号': info.taskId = value; break;
                         case '文件夹': info.folderPath = value; break;
@@ -981,15 +1281,14 @@
                     }
                 }
             }
-            
-            // 如果没有解析到 reasons，尝试从文本中查找
+
             if (!info.reasons || info.reasons.length === 0) {
                 const reasonMatch = text.match(/错误原因:\s*(.+)/);
                 if (reasonMatch) {
                     info.reasons = reasonMatch[1].split(',').map(r => r.trim()).filter(r => r);
                 }
             }
-            
+
             return info;
         }
 
@@ -1009,12 +1308,12 @@
             let total = 0;
             let tasksWithBadcase = 0;
             for (const item of resultItems) {
-                const c = parseInt(item.errorInfo.badcaseCount) || 0;
+                const c = (item.annotation && item.annotation.errors || []).length;
                 total += c;
                 if (c > 0) tasksWithBadcase++;
             }
             const el = document.getElementById('totalBadcaseInfo');
-            el.innerHTML = `共 <span class="total-num">${total}</span> 个 Badcase · ${tasksWithBadcase} 个任务`;
+            el.innerHTML = `共 <span class="total-num">${total}</span> 个错误 · ${tasksWithBadcase} 个任务`;
             el.style.display = 'inline-flex';
         }
 
@@ -1022,20 +1321,21 @@
         function renderTaskList() {
             const body = document.getElementById('taskListBody');
             body.innerHTML = '';
-            
+
             document.getElementById('taskCount').textContent = `${resultItems.length} 个任务`;
 
             resultItems.forEach((item, i) => {
                 const div = document.createElement('div');
                 div.className = 'task-item' + (i === 0 ? ' active' : '');
                 div.onclick = () => loadTask(i);
-                
-                const hasInfo = item.errorInfo.badcaseCount > 0 || (item.errorInfo.reasons && item.errorInfo.reasons.length > 0);
-                
+
+                const errorCount = (item.annotation && item.annotation.errors || []).length;
+                const hasInfo = errorCount > 0;
+
                 div.innerHTML = `
-                    <div class="task-id">${item.taskId}</div>
+                    <div class="task-id">${escapeHtml(item.taskId)}</div>
                     <div class="task-meta">
-                        <span>${item.imageName}</span>
+                        <span>${escapeHtml(item.imageName || '-')}</span>
                         <span class="task-status ${hasInfo ? 'has-info' : ''}"></span>
                     </div>
                 `;
@@ -1047,7 +1347,6 @@
             document.querySelectorAll('.task-item').forEach((el, i) => {
                 el.classList.toggle('active', i === index);
             });
-            // 滚动到可见区域
             const activeEl = document.querySelectorAll('.task-item')[index];
             if (activeEl) {
                 activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1058,186 +1357,352 @@
         function loadTask(index) {
             if (index < 0 || index >= resultItems.length) return;
 
-            // 切换前清理编辑器：移除监听、落盘最后一次输入、清除定时器
-            const editor = document.getElementById('rawReportEditor');
-            if (editor) editor.removeEventListener('input', handleEditorInput);
+            // 切换前清理编辑器：落盘最后一次输入、清除定时器
+            flushPendingEdit();
             clearTimeout(autoSaveTimer);
-            const prevItem = resultItems[currentIndex];
-            if (prevItem && prevItem.errorInfo && prevItem.errorInfo._raw !== undefined) {
-                saveLocalEdit(prevItem.taskId, prevItem.errorInfo._raw);
-            }
 
             currentIndex = index;
             const item = resultItems[index];
 
-            // 更新统计
             document.getElementById('statsInfo').textContent = `结果 ${index + 1} / ${resultItems.length}`;
 
-            // 加载图片
-            img.src = item.imageUrl;
+            // 加载图片 + 等加载完再画 bbox
+            if (item.imageUrl) {
+                renderBBoxOverlay(null);
+                img.onload = () => {
+                    syncOverlaySize();
+                    renderBBoxOverlay(item);
+                };
+                img.src = item.imageUrl;
+            } else {
+                img.removeAttribute('src');
+                renderBBoxOverlay(null);
+            }
 
-            // 更新导航按钮
             document.getElementById('prevBtn').disabled = index === 0;
             document.getElementById('nextBtn').disabled = index === resultItems.length - 1;
 
-            // 更新任务列表高亮
             updateTaskListActive(index);
-
-            // 更新信息面板
             renderInfoPanel(item);
+        }
+
+        // ============ bbox overlay ============
+        function syncOverlaySize() {
+            const w = img.naturalWidth || img.clientWidth || 1;
+            const h = img.naturalHeight || img.clientHeight || 1;
+            bboxOverlay.width = w;
+            bboxOverlay.height = h;
+        }
+
+        function renderBBoxOverlay(item) {
+            bboxCtx.clearRect(0, 0, bboxOverlay.width, bboxOverlay.height);
+            if (!item || !item.annotation || !item.annotation.errors) return;
+
+            const errors = item.annotation.errors;
+            errors.forEach((err, i) => {
+                const mark = err.marks && err.marks.find(m => m.role === 'primary');
+                if (!mark || !mark.geometry || !mark.geometry.bbox) return;
+                const [x, y, w, h] = mark.geometry.bbox;
+                if (w <= 0 || h <= 0) return;
+
+                const color = mark.color || getCategoryColor(err.error_type) || '#e74c3c';
+                bboxCtx.lineWidth = Math.max(2, (bboxOverlay.width || 800) / 400);
+                bboxCtx.strokeStyle = color;
+                bboxCtx.strokeRect(x, y, w, h);
+
+                // 半透明填充
+                bboxCtx.fillStyle = hexToRgba(color, 0.12);
+                bboxCtx.fillRect(x, y, w, h);
+
+                // 角标
+                const fontSize = Math.max(12, Math.round((bboxOverlay.width || 800) / 50));
+                bboxCtx.font = `bold ${fontSize}px -apple-system, sans-serif`;
+                const label = String(i + 1);
+                const padding = fontSize * 0.4;
+                const textW = bboxCtx.measureText(label).width + padding * 2;
+                const textH = fontSize + padding;
+                bboxCtx.fillStyle = color;
+                bboxCtx.fillRect(x, y, textW, textH);
+                bboxCtx.fillStyle = '#fff';
+                bboxCtx.textBaseline = 'top';
+                bboxCtx.fillText(label, x + padding, y + padding * 0.5);
+            });
+        }
+
+        function hexToRgba(hex, alpha) {
+            const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+            if (!m) return `rgba(231,76,60,${alpha})`;
+            return `rgba(${parseInt(m[1],16)},${parseInt(m[2],16)},${parseInt(m[3],16)},${alpha})`;
         }
 
         // ============ 渲染信息面板 ============
         function renderInfoPanel(item) {
             const body = document.getElementById('infoPanelBody');
-            const info = item.errorInfo;
-            
-            const reasonsHtml = info.reasons && info.reasons.length > 0
-                ? info.reasons.map(r => `<span class="reason-tag">${r}</span>`).join('')
-                : '<span class="reason-tag empty">无</span>';
+            const ann = item.annotation || (item.annotation = { status: 'pending', errors: [] });
+            const errors = ann.errors || (ann.errors = []);
+            const errorCount = errors.length;
 
-            const badcaseClass = info.badcaseCount > 0 ? '' : 'zero';
-            
+            const sourceTag = item.source === 'legacy'
+                ? '<span class="source-tag legacy">legacy txt</span>'
+                : '<span class="source-tag v2">v2 json</span>';
+
+            const legacy = ann._legacy || {};
+            const startedAt = ann.started_at || legacy.timestamp || '-';
+            const folderPath = legacy.folderPath || (item.imageName ? item.folderName : '-');
+
             body.innerHTML = `
                 <div class="info-section">
-                    <div class="info-section-title">任务编号</div>
+                    <div class="info-section-title">任务编号 ${sourceTag}</div>
                     <div class="info-value task-id-value">
-                        <span>${item.taskId}</span>
-                        <button class="copy-btn" onclick="copyTaskId(this, '${item.taskId}')">复制</button>
+                        <span>${escapeHtml(item.taskId)}</span>
+                        <button class="copy-btn" onclick="copyTaskId(this, '${escapeHtml(item.taskId)}')">复制</button>
                     </div>
                 </div>
-                
+
                 <div class="info-section">
-                    <div class="info-section-title">Badcase 数量</div>
+                    <div class="info-section-title">错误数量</div>
                     <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-                        <span class="badcase-badge ${badcaseClass}">${info.badcaseCount || 0}</span>
+                        <span class="badcase-badge ${errorCount > 0 ? '' : 'zero'}">${errorCount}</span>
                         <span style="font-size:13px;color:#888;">个</span>
                     </div>
                 </div>
-                
-                <div class="info-section">
-                    <div class="info-section-title">错误原因</div>
-                    <div class="reason-tags" style="margin-top:8px;">
-                        ${reasonsHtml}
-                    </div>
-                </div>
-                
+
                 <div class="info-section">
                     <div class="info-section-title">详细信息</div>
                     <div class="info-row">
                         <span class="info-label">文件夹</span>
-                        <span class="info-value">${info.folderPath || '-'}</span>
+                        <span class="info-value">${escapeHtml(folderPath)}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">图片名称</span>
-                        <span class="info-value">${info.imageName || item.imageName}</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">勾画痕迹</span>
-                        <span class="info-value">${info.hasDrawing ? '✓ 有' : '✗ 无'}</span>
+                        <span class="info-value">${escapeHtml(item.imageName || '-')}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">标注时间</span>
-                        <span class="info-value">${info.timestamp || '-'}</span>
+                        <span class="info-value">${escapeHtml(startedAt)}</span>
                     </div>
                 </div>
-                
+
                 <div class="info-section">
                     <div class="info-section-title report-title-bar">
-                        <span>原始报告</span>
+                        <span>错误列表</span>
                         <div class="report-toolbar">
                             <span class="auto-save-status" id="autoSaveStatus" style="display:none;">已自动保存</span>
                             <button class="report-btn" id="editReportBtn" onclick="enterEditMode()">✏️ 编辑</button>
-                            <button class="report-btn save-btn" id="downloadReportBtn" onclick="downloadReport()" title="下载修改后的 error_info.txt">💾 下载</button>
+                            <button class="report-btn save-btn" id="downloadReportBtn" onclick="downloadReport()" title="下载 default.json">💾 下载</button>
                             <button class="report-btn" id="finishReportBtn" onclick="exitEditMode()" style="display:none;">✅ 完成</button>
                         </div>
                     </div>
-                    <div class="info-text-block" id="rawReportView">${escapeHtml(item.errorInfo._raw) || '<span style="color:#999;">无详细报告（点击「编辑」可创建）</span>'}</div>
-                    <textarea class="report-editor" id="rawReportEditor" style="display:none;" placeholder="在此编辑原始报告内容，修改会自动保存..."></textarea>
-                    <div class="report-hint" id="reportHint" style="display:none;">
-                        修改内容会<span class="warn">实时自动保存</span>到当前会话和浏览器本地。点击「💾 下载」可生成新的 <code>error_info.txt</code> 替换原文件。
+                    <div id="errorListView">${renderErrorListView(errors)}</div>
+                    <div id="errorEditView" style="display:none;"></div>
+                </div>
+            `;
+        }
+
+        // 只读模式：错误列表
+        function renderErrorListView(errors) {
+            if (!errors || errors.length === 0) {
+                return '<div style="color:#999;font-size:13px;padding:8px 0;">无错误记录（点击「编辑」可添加）</div>';
+            }
+            const html = errors.map((err, i) => {
+                const color = getCategoryColor(err.error_type);
+                const typeLabel = getCategoryLabel(err.error_type);
+                const subtypeLabel = err.error_subtype ? getSubtypeLabel(err.error_type, err.error_subtype) : '';
+                const mark = err.marks && err.marks.find(m => m.role === 'primary');
+                const bbox = mark && mark.geometry && mark.geometry.bbox;
+                const bboxInfo = bbox
+                    ? `<div class="error-bbox-info">bbox: [${bbox.map(v => Math.round(v)).join(', ')}]</div>`
+                    : `<div class="error-bbox-info empty">位置信息缺失（历史数据）</div>`;
+                return `
+                    <div class="error-card">
+                        <div class="error-card-header">
+                            <span class="error-card-index">${i + 1}</span>
+                            <span class="error-type-badge" style="background:${color};">${escapeHtml(typeLabel)}${subtypeLabel ? ' · ' + escapeHtml(subtypeLabel) : ''}</span>
+                        </div>
+                        <div class="error-comment">${escapeHtml(err.comment || '')}</div>
+                        ${bboxInfo}
+                    </div>
+                `;
+            }).join('');
+            return `<div class="error-list">${html}</div>`;
+        }
+
+        // 编辑模式：字段级编辑器
+        function renderErrorEditView(errors) {
+            const rows = errors.map((err, i) => renderErrorEditRow(err, i)).join('');
+            return `
+                <div class="error-list" id="errorEditList">${rows}</div>
+                <button class="add-error-btn" onclick="addNewError()">+ 添加错误</button>
+                <div style="font-size:11px;color:#999;margin-top:8px;line-height:1.5;">
+                    修改会<span style="color:#e67e22;">实时自动保存</span>到当前会话和浏览器本地。点击「💾 下载」可生成新的 <code>annotation.json</code>。
+                </div>
+            `;
+        }
+
+        function renderErrorEditRow(err, i) {
+            const color = getCategoryColor(err.error_type);
+            const typeLabel = getCategoryLabel(err.error_type);
+            const subtypeLabel = err.error_subtype || '';
+
+            const typeOptions = taxonomy.categories.map(c =>
+                `<option value="${c.id}" ${c.id === err.error_type ? 'selected' : ''}>${escapeHtml(c.label)}</option>`
+            ).join('');
+
+            const cat = getCategory(err.error_type);
+            const subtypeOptions = cat
+                ? cat.subtypes.map(s =>
+                    `<option value="${s.id}" ${s.id === subtypeLabel ? 'selected' : ''}>${escapeHtml(s.label)}</option>`
+                ).join('')
+                : '';
+
+            const mark = err.marks && err.marks.find(m => m.role === 'primary');
+            const bbox = mark && mark.geometry && mark.geometry.bbox;
+            const bboxText = bbox ? `[${bbox.map(v => Math.round(v)).join(', ')}]` : '位置信息缺失（历史数据，无法编辑）';
+
+            return `
+                <div class="error-edit-row" data-error-id="${escapeHtml(err.error_id)}">
+                    <div class="row-header">
+                        <span class="error-card-index">${i + 1}</span>
+                        <span class="error-type-badge" style="background:${color};">${escapeHtml(typeLabel)}</span>
+                        <button class="error-delete-btn" onclick="deleteError('${escapeHtml(err.error_id)}')" title="删除">✕</button>
+                    </div>
+                    <div class="field-row">
+                        <select data-field="error_type" onchange="updateErrorField('${escapeHtml(err.error_id)}', 'error_type', this.value)">
+                            ${typeOptions}
+                        </select>
+                        <select data-field="error_subtype" onchange="updateErrorField('${escapeHtml(err.error_id)}', 'error_subtype', this.value)">
+                                <option value="" ${!subtypeLabel ? 'selected' : ''}>无子类型</option>
+                                ${subtypeOptions}
+                        </select>
+                    </div>
+                    <textarea data-field="comment" oninput="updateErrorField('${escapeHtml(err.error_id)}', 'comment', this.value)" placeholder="错误说明...">${escapeHtml(err.comment || '')}</textarea>
+                    <div class="row-footer">
+                        <span style="font-family:monospace;">bbox: ${escapeHtml(bboxText)}</span>
                     </div>
                 </div>
             `;
         }
 
-        // ============ 原始报告编辑（实时自动保存） ============
-        let autoSaveTimer = null;
-        const AUTO_SAVE_KEY_PREFIX = 'gradingReport:';
+        // ============ 编辑模式 ============
+        let editModeActive = false;
 
         function enterEditMode() {
             const item = resultItems[currentIndex];
-            const view = document.getElementById('rawReportView');
-            const editor = document.getElementById('rawReportEditor');
-            const editBtn = document.getElementById('editReportBtn');
-            const finishBtn = document.getElementById('finishReportBtn');
-            const hint = document.getElementById('reportHint');
-
-            editor.value = item.errorInfo._raw || '';
-            view.style.display = 'none';
-            editor.style.display = 'block';
-            editBtn.style.display = 'none';
-            finishBtn.style.display = 'inline-block';
-            hint.style.display = 'block';
-
-            setAutoSaveStatus('idle');
-            editor.removeEventListener('input', handleEditorInput);
-            editor.addEventListener('input', handleEditorInput);
-            editor.focus();
-            const len = editor.value.length;
-            editor.setSelectionRange(len, len);
-        }
-
-        function handleEditorInput() {
-            const editor = document.getElementById('rawReportEditor');
-            if (!editor) return;
-            const text = editor.value;
-            const item = resultItems[currentIndex];
             if (!item) return;
 
-            // 立即更新内存：切换任务/卸载页面都不丢
-            applyReportTextToItem(item, text);
-            setAutoSaveStatus('saving');
+            editModeActive = true;
+            document.getElementById('editReportBtn').style.display = 'none';
+            document.getElementById('finishReportBtn').style.display = 'inline-block';
+            document.getElementById('errorListView').style.display = 'none';
+            document.getElementById('errorEditView').style.display = 'block';
 
-            // 防抖落盘 localStorage，避免高频写入
-            clearTimeout(autoSaveTimer);
-            autoSaveTimer = setTimeout(() => {
-                saveLocalEdit(item.taskId, text);
-                setAutoSaveStatus('saved');
-            }, 400);
+            renderErrorEditViewInner(item);
+            setAutoSaveStatus('idle');
         }
 
-        function applyReportTextToItem(item, text) {
-            const newInfo = parseErrorInfo(text);
-            newInfo._raw = text;
-
-            // 文本里没解析出来的字段回退到旧值
-            if (!newInfo.taskId) newInfo.taskId = item.taskId;
-            if (!newInfo.folderPath) newInfo.folderPath = item.errorInfo.folderPath;
-            if (!newInfo.imageName) newInfo.imageName = item.errorInfo.imageName || item.imageName;
-            if (newInfo.timestamp === undefined) newInfo.timestamp = item.errorInfo.timestamp;
-            if (newInfo.badcaseCount === undefined) newInfo.badcaseCount = item.errorInfo.badcaseCount;
-            if (newInfo.hasDrawing === undefined) newInfo.hasDrawing = item.errorInfo.hasDrawing;
-
-            item.errorInfo = newInfo;
+        function renderErrorEditViewInner(item) {
+            const wrap = document.getElementById('errorEditView');
+            wrap.innerHTML = renderErrorEditView(item.annotation.errors);
         }
 
         function exitEditMode() {
-            const editor = document.getElementById('rawReportEditor');
-            if (editor) editor.removeEventListener('input', handleEditorInput);
+            editModeActive = false;
+            flushPendingEdit();
             clearTimeout(autoSaveTimer);
 
-            // 退出前确保最后一次编辑落盘
+            document.getElementById('editReportBtn').style.display = 'inline-block';
+            document.getElementById('finishReportBtn').style.display = 'none';
+            document.getElementById('errorListView').style.display = 'block';
+            document.getElementById('errorEditView').style.display = 'none';
+            document.getElementById('errorEditView').innerHTML = '';
+
             const item = resultItems[currentIndex];
             if (item) {
-                saveLocalEdit(item.taskId, item.errorInfo._raw || '');
+                renderInfoPanel(item);
+                renderBBoxOverlay(item);
+                renderTaskList();
+                updateTaskListActive(currentIndex);
+                updateTotalBadcase();
+            }
+        }
+
+        function updateErrorField(errorId, field, value) {
+            const item = resultItems[currentIndex];
+            if (!item) return;
+            const err = item.annotation.errors.find(e => e.error_id === errorId);
+            if (!err) return;
+
+            if (field === 'error_type') {
+                err.error_type = value;
+                // 类型变化时清空 subtype，并刷新该行的子类型下拉与颜色
+                err.error_subtype = null;
+                const mark = err.marks && err.marks.find(m => m.role === 'primary');
+                if (mark) mark.color = getCategoryColor(value);
+                renderErrorEditViewInner(item);
+                renderBBoxOverlay(item);
+            } else if (field === 'error_subtype') {
+                err.error_subtype = value || null;
+            } else if (field === 'comment') {
+                err.comment = value;
             }
 
-            // 重新渲染，回到查看模式，同步刷新解析字段、任务列表、统计
-            renderInfoPanel(item);
-            renderTaskList();
-            updateTaskListActive(currentIndex);
-            updateTotalBadcase();
+            scheduleAutoSave(item);
+        }
+
+        function addNewError() {
+            const item = resultItems[currentIndex];
+            if (!item) return;
+            const newId = 'err_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+            const newError = {
+                error_id: newId,
+                error_type: taxonomy.categories[0].id,
+                error_subtype: null,
+                severity: null,
+                comment: '',
+                // viewer 无法画 bbox，新建的错误是纯文本说明（note 角色，无 geometry）
+                marks: [],
+                annotator_id: ANNOTATOR_ID,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                duration_ms: null
+            };
+            item.annotation.errors.push(newError);
+            if (item.annotation.status === 'pending') item.annotation.status = 'annotated';
+            renderErrorEditViewInner(item);
+            scheduleAutoSave(item);
+        }
+
+        function deleteError(errorId) {
+            const item = resultItems[currentIndex];
+            if (!item) return;
+            item.annotation.errors = item.annotation.errors.filter(e => e.error_id !== errorId);
+            if (item.annotation.errors.length === 0) item.annotation.status = 'pending';
+            renderErrorEditViewInner(item);
+            renderBBoxOverlay(item);
+            scheduleAutoSave(item);
+        }
+
+        function scheduleAutoSave(item) {
+            setAutoSaveStatus('saving');
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                // 更新 saved_at 以便下次加载时 freshness 检查能识别新版本
+                item.annotation.saved_at = new Date().toISOString();
+                saveLocalEdit(item.taskId, item.annotation);
+                setAutoSaveStatus('saved');
+            }, STORAGE_DEBOUNCE_MS);
+        }
+
+        function flushPendingEdit() {
+            // 切换任务/退出编辑前调用：把内存中的当前 annotation 落盘
+            if (autoSaveTimer) {
+                clearTimeout(autoSaveTimer);
+                autoSaveTimer = null;
+                const item = resultItems[currentIndex];
+                if (item) {
+                    saveLocalEdit(item.taskId, item.annotation);
+                }
+            }
         }
 
         function setAutoSaveStatus(state) {
@@ -1261,29 +1726,78 @@
             }
         }
 
+        // ============ 下载 annotation.json ============
         async function downloadReport() {
             const item = resultItems[currentIndex];
             if (!item) return;
-            const text = item.errorInfo._raw || '';
+            // 先把内存里的最新状态落盘
+            flushPendingEdit();
 
-            const result = await writeErrorInfoFile(text, item);
+            const payload = serializeAnnotationForExport(item);
+            const text = JSON.stringify(payload, null, 2);
+
+            const result = await writeAnnotationJsonFile(text, item);
             if (result === 'file') {
-                showToast('✓ error_info.txt 已写入文件');
+                showToast('✓ default.json 已写入文件');
             } else if (result === 'download') {
-                showToast('✓ 已下载 error_info.txt，请替换原文件');
+                showToast('✓ 已下载 default.json，请替换原文件');
             }
-            // cancelled：用户取消，不提示
         }
 
-        async function writeErrorInfoFile(text, item) {
-            // 优先 File System Access API 直接覆盖原文件
+        function serializeAnnotationForExport(item) {
+            // 保留原 schema 的 image 段（如果 v2 有）；legacy 走兜底
+            const ann = item.annotation;
+            const baseImage = {
+                task_id: item.taskId,
+                source_path: item.imageName ? `${item.folderName}/${item.imageName}` : item.folderName,
+                source_hash: null,
+                width: img.naturalWidth || null,
+                height: img.naturalHeight || null,
+                metadata: { task_ids: [item.taskId] }
+            };
+
+            return {
+                schema_version: SCHEMA_VERSION,
+                image: baseImage,
+                annotation: {
+                    status: ann.status || (ann.errors.length > 0 ? 'annotated' : 'pending'),
+                    errors: ann.errors.map(e => ({
+                        error_id: e.error_id,
+                        error_type: e.error_type,
+                        error_subtype: e.error_subtype || null,
+                        severity: e.severity || null,
+                        comment: e.comment || '',
+                        marks: (e.marks || []).map(m => ({
+                            mark_id: m.mark_id,
+                            role: m.role,
+                            type: m.type,
+                            geometry: { bbox: m.geometry ? m.geometry.bbox : null, points: m.geometry ? m.geometry.points : null },
+                            color: m.color || getCategoryColor(e.error_type),
+                            width: m.width || 2
+                        })),
+                        annotator_id: e.annotator_id || ANNOTATOR_ID,
+                        created_at: e.created_at || null,
+                        updated_at: e.updated_at || new Date().toISOString(),
+                        duration_ms: e.duration_ms || null
+                    })),
+                    session_id: ann.session_id || null,
+                    annotator_id: ann.annotator_id || ANNOTATOR_ID,
+                    started_at: ann.started_at || null,
+                    saved_at: new Date().toISOString(),
+                    total_duration_ms: ann.total_duration_ms || 0,
+                    client: { tool_version: 'viewer-2.0.0', browser: navigator.userAgent }
+                }
+            };
+        }
+
+        async function writeAnnotationJsonFile(text, item) {
             if (window.showSaveFilePicker) {
                 try {
                     const handle = await window.showSaveFilePicker({
-                        suggestedName: 'error_info.txt',
+                        suggestedName: 'default.json',
                         types: [{
-                            description: '文本文件',
-                            accept: { 'text/plain': ['.txt'] }
+                            description: 'JSON 文件',
+                            accept: { 'application/json': ['.json'] }
                         }]
                     });
                     const writable = await handle.createWritable();
@@ -1295,16 +1809,16 @@
                     console.warn('showSaveFilePicker 失败，回退到下载:', err);
                 }
             }
-            downloadErrorInfo(text, item);
+            downloadJson(text);
             return 'download';
         }
 
-        function downloadErrorInfo(text, item) {
-            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        function downloadJson(text) {
+            const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'error_info.txt';
+            a.download = 'default.json';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1313,12 +1827,16 @@
 
         // ============ 本地存储（跨会话持久化） ============
         function localEditKey(taskId) {
-            return AUTO_SAVE_KEY_PREFIX + taskId;
+            return STORAGE_PREFIX_V2 + taskId;
         }
 
-        function saveLocalEdit(taskId, text) {
+        function legacyLocalEditKey(taskId) {
+            return STORAGE_PREFIX_LEGACY + taskId;
+        }
+
+        function saveLocalEdit(taskId, annotation) {
             try {
-                localStorage.setItem(localEditKey(taskId), text);
+                localStorage.setItem(localEditKey(taskId), JSON.stringify(annotation));
             } catch (err) {
                 console.warn('localStorage 写入失败:', err);
             }
@@ -1326,19 +1844,83 @@
 
         function getLocalEdit(taskId) {
             try {
-                return localStorage.getItem(localEditKey(taskId));
+                const raw = localStorage.getItem(localEditKey(taskId));
+                if (raw) return { kind: 'v2', data: JSON.parse(raw) };
+                // 一次性迁移旧 key
+                const legacyRaw = localStorage.getItem(legacyLocalEditKey(taskId));
+                if (legacyRaw) {
+                    // 旧数据是 raw 文本，做尽力解析
+                    const info = parseErrorInfo(legacyRaw);
+                    const migrated = migrateLegacyTextToAnnotation(info, legacyRaw);
+                    localStorage.setItem(localEditKey(taskId), JSON.stringify(migrated));
+                    localStorage.removeItem(legacyLocalEditKey(taskId));
+                    return { kind: 'legacy', data: migrated };
+                }
+                return null;
             } catch (err) {
                 return null;
             }
         }
 
+        function migrateLegacyTextToAnnotation(info, rawText) {
+            const reasons = info.reasons || [];
+            const errors = reasons.map((r, i) => {
+                const typeId = mapReasonToCategoryId(r);
+                return {
+                    error_id: `legacy_${String(i + 1).padStart(2, '0')}`,
+                    error_type: typeId || 'topic',
+                    error_subtype: null,
+                    severity: null,
+                    comment: '（历史数据，位置信息未保留，迁移自 error_info.txt）',
+                    marks: [{
+                        mark_id: `legacy_m_${i + 1}`,
+                        role: 'primary',
+                        type: 'bbox',
+                        geometry: { bbox: null, points: null },
+                        color: getCategoryColor(typeId || 'topic'),
+                        width: 2
+                    }],
+                    annotator_id: 'legacy',
+                    created_at: info.timestamp || null,
+                    updated_at: info.timestamp || null,
+                    duration_ms: null
+                };
+            });
+            return {
+                status: errors.length > 0 ? 'annotated' : 'pending',
+                errors,
+                session_id: null,
+                annotator_id: 'legacy',
+                started_at: info.timestamp || null,
+                saved_at: info.timestamp || null,
+                _legacy: {
+                    folderPath: info.folderPath,
+                    timestamp: info.timestamp,
+                    hasDrawing: info.hasDrawing,
+                    badcaseCount: info.badcaseCount,
+                    reasons: info.reasons
+                }
+            };
+        }
+
         function applyLocalEdits() {
-            // 文件夹加载后，把上次会话的本地编辑覆盖回内存
+            // 仅当本地编辑严格新于文件 saved_at 时才覆盖，
+            // 避免 localStorage 残留污染下一次加载的同 task_id 数据
             for (const item of resultItems) {
                 const local = getLocalEdit(item.taskId);
-                if (local !== null) {
-                    applyReportTextToItem(item, local);
+                if (!local || !local.data) continue;
+                const fileSavedAt = item.annotation && item.annotation.saved_at;
+                const localSavedAt = local.data.saved_at;
+                if (fileSavedAt && localSavedAt) {
+                    if (new Date(localSavedAt).getTime() <= new Date(fileSavedAt).getTime()) {
+                        continue;
+                    }
                 }
+                // 保留文件的 _legacy 元信息（local 通常没有）
+                if (item.annotation && item.annotation._legacy && !local.data._legacy) {
+                    local.data._legacy = item.annotation._legacy;
+                }
+                item.annotation = local.data;
             }
         }
 
@@ -1370,7 +1952,6 @@
                     btn.classList.remove('copied');
                 }, 1500);
             }).catch(() => {
-                // 降级方案
                 const originalText = btn.textContent;
                 const textarea = document.createElement('textarea');
                 textarea.value = taskId;
@@ -1406,7 +1987,7 @@
         function applyZoom() {
             const box = document.getElementById('imageBox');
             const wrapper = document.getElementById('imageWrapper');
-            
+
             if (zoomMode === 'fit-width') {
                 box.classList.add('fit-width');
                 wrapper.classList.add('fit-width');
@@ -1414,6 +1995,11 @@
                 box.classList.remove('fit-width');
                 wrapper.classList.remove('fit-width');
             }
+            // 切换后重新同步 overlay 尺寸（CSS 缩放变化但 canvas 内部分辨率不变）
+            requestAnimationFrame(() => {
+                syncOverlaySize();
+                renderBBoxOverlay(resultItems[currentIndex]);
+            });
         }
 
         // ============ 提示 ============
@@ -1435,6 +2021,10 @@
 
         // ============ 键盘快捷键 ============
         document.addEventListener('keydown', (e) => {
+            // 输入框中不触发导航
+            const tag = (e.target.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
             switch(e.key) {
                 case 'ArrowUp': prevTask(); break;
                 case 'ArrowDown': nextTask(); break;
@@ -1442,6 +2032,16 @@
                 case 'ArrowRight': nextTask(); break;
             }
         });
+
+        // ============ 窗口尺寸变化时重画 overlay ============
+        window.addEventListener('resize', () => {
+            if (!resultItems[currentIndex]) return;
+            syncOverlaySize();
+            renderBBoxOverlay(resultItems[currentIndex]);
+        });
+
+        // ============ 初始化 ============
+        loadTaxonomy();
     </script>
 </body>
 </html>
