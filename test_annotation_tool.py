@@ -375,6 +375,56 @@ async def run_tests():
                 print(f"  ✓ 缩略图第一行 top={occlusion['thumbTop']:.0f} ≥ header.bottom={occlusion['hdrBottom']:.0f}")
             passed += 1
 
+            print("\n[测试 14.7] 任务编号完整展示 + 复制按钮...")
+            await context.grant_permissions(permissions=['clipboard-read', 'clipboard-write'])
+            # 切到第三张图（最长的 taskId 验证不截断 + 不溢出）
+            await page.evaluate("() => loadImage(2)")
+            await page.wait_for_timeout(200)
+            current_task_id = await page.evaluate("() => taskItems[currentIndex].taskId")
+            info = await page.evaluate("""
+                () => {
+                    const el = document.getElementById('taskId');
+                    const btn = document.getElementById('copyTaskIdBtn');
+                    if (!el || !btn) return {missing: true};
+                    const row = el.closest('.task-info-row');
+                    return {
+                        text: el.textContent.trim(),
+                        clientWidth: el.clientWidth,
+                        scrollWidth: el.scrollWidth,
+                        truncated: el.scrollWidth > el.clientWidth + 1,
+                        btnExists: !!btn,
+                        btnVisible: btn.offsetParent !== null,
+                        rowOverflows: row.scrollWidth > row.clientWidth + 1
+                    };
+                }
+            """)
+            assert not info.get("missing"), "任务编号元素或复制按钮不存在"
+            assert info["text"] == current_task_id, \
+                f"任务编号文本错误: 期望 {current_task_id}, 实际 {info['text']}"
+            assert not info["truncated"], \
+                f"任务编号被截断：scrollW={info['scrollWidth']} > clientW={info['clientWidth']}"
+            assert not info["rowOverflows"], "任务编号行横向溢出"
+            assert info["btnExists"] and info["btnVisible"], "复制按钮未渲染"
+            print(f"  ✓ 任务编号完整展示（{len(info['text'])} 字符，未截断/未溢出）")
+            # 点击复制并验证剪贴板
+            await page.locator("#copyTaskIdBtn").click()
+            await page.wait_for_timeout(150)
+            clipboard_text = await page.evaluate("""
+                async () => {
+                    try {
+                        return await navigator.clipboard.readText();
+                    } catch (e) {
+                        return 'ERR:' + e.message;
+                    }
+                }
+            """)
+            assert clipboard_text == current_task_id, \
+                f"剪贴板内容错误: 期望 {current_task_id}, 实际 {clipboard_text!r}"
+            btn_label = await page.locator("#copyTaskIdBtn").text_content()
+            assert btn_label.strip() == '已复制', f"复制后按钮文案错误: {btn_label!r}"
+            print(f"  ✓ 复制按钮写入剪贴板成功，按钮态切换为「已复制」")
+            passed += 1
+
 
 
 

@@ -389,6 +389,18 @@
             border-bottom: none;
         }
 
+        .task-info-item--vertical {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 4px;
+        }
+
+        .task-info-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+
         .task-info-label {
             color: #888;
         }
@@ -402,6 +414,38 @@
             white-space: nowrap;
             font-family: monospace;
             font-size: 11px;
+        }
+
+        .task-info-value--wrap {
+            max-width: none;
+            overflow: visible;
+            text-overflow: clip;
+            white-space: normal;
+            word-break: break-all;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .copy-btn {
+            flex-shrink: 0;
+            padding: 2px 8px;
+            font-size: 11px;
+            line-height: 1.4;
+            background: #f0f4ff;
+            color: #4a6cf7;
+            border: 1px solid #c5d3ff;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, transform 0.1s;
+        }
+
+        .copy-btn:hover {
+            background: #4a6cf7;
+            color: white;
+        }
+
+        .copy-btn:active {
+            transform: scale(0.95);
         }
 
         .action-section {
@@ -807,9 +851,12 @@
 
             <div class="sidebar-section task-info">
                 <div class="sidebar-title">当前任务信息</div>
-                <div class="task-info-item">
+                <div class="task-info-item task-info-item--vertical">
                     <span class="task-info-label">任务编号</span>
-                    <span class="task-info-value" id="taskId">-</span>
+                    <div class="task-info-row">
+                        <span class="task-info-value task-info-value--wrap" id="taskId">-</span>
+                        <button class="copy-btn" id="copyTaskIdBtn" type="button" title="复制任务编号" onclick="copyTaskId()">复制</button>
+                    </div>
                 </div>
                 <div class="task-info-item">
                     <span class="task-info-label">文件夹</span>
@@ -1781,6 +1828,45 @@
         function nextImage() { if (currentIndex < taskItems.length - 1) loadImage(currentIndex + 1); }
 
         // ============ Toast / Loading ============
+        function copyTaskId() {
+            const taskIdEl = document.getElementById('taskId');
+            const taskId = (taskIdEl && taskIdEl.textContent || '').trim();
+            if (!taskId || taskId === '-') {
+                showToast('暂无任务编号可复制');
+                return;
+            }
+            const btn = document.getElementById('copyTaskIdBtn');
+            const done = () => {
+                if (btn) {
+                    const original = btn.textContent;
+                    btn.textContent = '已复制';
+                    setTimeout(() => { btn.textContent = original; }, 1500);
+                }
+                showToast('任务编号已复制');
+            };
+            const fail = () => {
+                showToast('复制失败，请手动选中文字');
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(taskId).then(done).catch(fail);
+            } else {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = taskId;
+                    ta.style.position = 'fixed';
+                    ta.style.top = '-1000px';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    const ok = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    if (ok) done(); else fail();
+                } catch (e) {
+                    fail();
+                }
+            }
+        }
+
         function showToast(msg) {
             const toast = document.getElementById('toast');
             toast.textContent = msg;
