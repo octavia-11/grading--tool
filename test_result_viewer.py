@@ -486,6 +486,74 @@ async def run_tests():
             print(f"  ✓ 排序正确（badcase 优先），徽章 + 统计同步更新")
             passed += 1
 
+            # ============ 测试 17: judgments 卡片渲染 ============
+            print("\n[测试 17] judgments 卡片...")
+            await page.evaluate("""
+                async () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 800; canvas.height = 600;
+                    const dataUrl = canvas.toDataURL('image/jpeg');
+
+                    resultItems = [
+                        {
+                            taskId: 'judge-test', folderName: 'judge-test', imageName: 'source.jpg',
+                            imageUrl: dataUrl, schemaVersion: '1.0', source: 'v2',
+                            annotation: {
+                                status: 'annotated',
+                                errors: [],
+                                judgments: [
+                                    {question_no:'1(1)', status:'correct'},
+                                    {question_no:'1(2)', status:'wrong'},
+                                    {question_no:'2',   status:'unmarked'},
+                                    {question_no:'3',   status:'correct'}
+                                ],
+                                session_id:'s', annotator_id:'default',
+                                started_at:'2026-06-10T12:00:00Z',
+                                saved_at:'2026-06-10T12:01:00Z'
+                            }
+                        }
+                    ];
+                    sortResultItemsByBadcase();
+                    currentIndex = 0;
+                    initUI();
+                    loadTask(0);
+                }
+            """)
+            await asyncio.sleep(0.4)
+
+            # 应渲染 4 个 jchip
+            chips = page.locator(".jchip")
+            await expect(chips).to_have_count(4)
+
+            # 状态色：correct/wrong/unmarked
+            chip_classes = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('.jchip'))
+                          .map(el => el.className)
+            """)
+            # 题号 + 类
+            chip_data = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('.jchip'))
+                          .map(el => ({text: el.textContent.trim(), cls: el.className}))
+            """)
+            by_q = {d['text']: d['cls'] for d in chip_data}
+            assert 'correct' in by_q.get('1(1)', ''), f"1(1) 应为 correct：{by_q}"
+            assert 'wrong' in by_q.get('1(2)', ''), f"1(2) 应为 wrong：{by_q}"
+            assert by_q.get('2', '').strip() == 'jchip', f"2 应为 unmarked（仅基础类）：{by_q}"
+            assert 'correct' in by_q.get('3', ''), f"3 应为 correct：{by_q}"
+
+            # 摘要行：共 4 题 · 对 2 · 错 1 · 未判 1
+            jsummary = await page.evaluate("""
+                () => {
+                    const sec = Array.from(document.querySelectorAll('.info-section'))
+                        .find(s => s.querySelector('.info-section-title')?.textContent.trim() === '题号判题');
+                    return sec ? sec.textContent.replace(/\\s+/g, ' ').trim() : '';
+                }
+            """)
+            assert '共 4 题' in jsummary and '对 2' in jsummary and '错 1' and '未判 1' in jsummary, \
+                f"摘要行错误：{jsummary}"
+            print(f"  ✓ judgments 卡片渲染正确（4 chips，状态色 + 摘要对齐）")
+            passed += 1
+
         except Exception as e:
             print(f"  ✗ 测试失败: {e}")
             failed += 1

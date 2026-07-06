@@ -83,6 +83,34 @@
             cursor: not-allowed;
         }
 
+        .settings-btn {
+            background: rgba(255,255,255,0.9);
+            color: #764ba2;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .settings-btn:hover { background: white; transform: rotate(45deg); }
+        .settings-btn.has-config::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #27ae60;
+        }
+        .settings-btn { position: relative; }
+
         .progress-info {
             font-size: 14px;
             opacity: 0.9;
@@ -785,6 +813,175 @@
             margin-bottom: 16px;
         }
 
+        /* ============ 底部题号栏 ============ */
+        .question-bar {
+            flex-shrink: 0;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 0 14px;
+            height: 56px;
+            background: #fafafa;
+            border-top: 1px solid #e0e0e0;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .question-bar.show { display: flex; }
+
+        .question-bar-status {
+            flex-shrink: 0;
+            font-size: 12px;
+            color: #888;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .question-bar-status.error { color: #d4380d; }
+        .question-bar-status.loading { color: #1890ff; }
+
+        .question-bar-list {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 2px 0;
+        }
+        .question-bar-list::-webkit-scrollbar { height: 6px; }
+        .question-bar-list::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
+
+        .qbtn {
+            flex-shrink: 0;
+            padding: 4px 12px;
+            min-width: 36px;
+            border: 1px solid #d9d9d9;
+            border-radius: 14px;
+            background: white;
+            color: #555;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .qbtn:hover { border-color: #1890ff; }
+        .qbtn.correct {
+            background: #f6ffed;
+            color: #389e0d;
+            border-color: #b7eb8f;
+        }
+        .qbtn.wrong {
+            background: #fff1f0;
+            color: #d4380d;
+            border-color: #ffccc7;
+        }
+
+        .question-bar-refresh {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            border: 1px solid #d9d9d9;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            transition: all 0.15s;
+        }
+        .question-bar-refresh:hover { border-color: #1890ff; color: #1890ff; }
+        .question-bar-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .question-bar-mini-spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #d0d0d0;
+            border-top-color: #1890ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+
+        /* ============ 设置 modal ============ */
+        .settings-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2100;
+        }
+        .settings-overlay.show { display: flex; }
+
+        .settings-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px 28px;
+            width: 420px;
+            max-width: calc(100vw - 32px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+        }
+        .settings-card h3 {
+            margin: 0 0 18px;
+            font-size: 18px;
+            color: #333;
+        }
+        .settings-card label {
+            display: block;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: #666;
+        }
+        .settings-card input {
+            display: block;
+            width: 100%;
+            margin-top: 4px;
+            padding: 7px 10px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        .settings-card input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102,126,234,0.15);
+        }
+        .settings-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 18px;
+        }
+        .settings-actions button {
+            padding: 7px 16px;
+            border: 1px solid #d9d9d9;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .settings-actions .primary {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .settings-actions button:hover { border-color: #667eea; }
+        .settings-actions .primary:hover { background: #5568d3; }
+        .settings-hint {
+            margin: 10px 0 0;
+            font-size: 11px;
+            color: #999;
+            line-height: 1.5;
+        }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -812,6 +1009,7 @@
             <span class="stats-badge" id="statsBadge" style="display:none;">已标注: 0</span>
             <button class="folder-select-btn" onclick="selectFolder()">📁 选择文件夹</button>
             <button class="export-btn" id="exportBtn" onclick="exportResults()" disabled>📦 导出结果</button>
+            <button class="settings-btn" id="vlmSettingsBtn" onclick="openVlmSettings()" title="VLM 设置">⚙</button>
         </div>
     </div>
 
@@ -888,6 +1086,12 @@
         </div>
     </div>
 
+    <div class="question-bar" id="questionBar">
+        <div class="question-bar-status" id="qbStatus">未配置 VLM</div>
+        <div class="question-bar-list" id="qbList"></div>
+        <button class="question-bar-refresh" id="qbRefresh" title="重新识别题号" onclick="refreshQuestions()">↻</button>
+    </div>
+
     <div class="thumbnail-bar" id="thumbnailBar" style="display:none;">
         <div class="thumb-nav">
             <button class="thumb-nav-btn" onclick="prevImage()" id="prevBtn">↑ 上一张</button>
@@ -904,6 +1108,26 @@
         <div class="loading-text" id="loadingText">正在加载...</div>
     </div>
 
+    <div class="settings-overlay" id="vlmSettingsOverlay">
+        <div class="settings-card">
+            <h3>VLM 设置</h3>
+            <label>Base URL
+                <input id="vlmBaseUrl" type="text" placeholder="https://ark.cn-beijing.volces.com/api/v3">
+            </label>
+            <label>Model ID
+                <input id="vlmModelId" type="text" placeholder="doubao-1.5-vision-pro-32k-...">
+            </label>
+            <label>API Key
+                <input id="vlmApiKey" type="password" placeholder="sk-...">
+            </label>
+            <div class="settings-actions">
+                <button onclick="closeVlmSettings()">取消</button>
+                <button class="primary" onclick="saveVlmSettings()">保存</button>
+            </div>
+            <p class="settings-hint">key 仅存本浏览器 localStorage，不会随 ZIP 导出，不会上传到任何第三方服务。base_url 留空则用默认值（豆包 Ark）。</p>
+        </div>
+    </div>
+
     <script>
         // ============ 全局状态 ============
         const ANNOTATOR_ID = 'default';
@@ -911,6 +1135,13 @@
         const TOOL_VERSION = '2.0.0';
         const STORAGE_PREFIX = 'gradingAnnotation:';
         const STORAGE_DEBOUNCE_MS = 400;
+        const VLM_DEFAULT_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3';
+        const VLM_STORAGE_KEYS = {
+            baseUrl: 'vlm:baseUrl',
+            modelId: 'vlm:modelId',
+            apiKey: 'vlm:apiKey'
+        };
+        const VLM_CACHE_PREFIX = 'vlmCache:';
 
         let taskItems = [];
         let currentIndex = 0;
@@ -928,6 +1159,12 @@
         let imageLoadTime = {};      // itemId -> timestamp(ms) 进入该图时记录
         let taxonomy = null;
         let storageTimer = null;
+
+        // VLM 题号相关
+        let currentQuestionList = [];   // [{question_no:'1(1)'}, ...] 来自 VLM 缓存或实时调用
+        let currentJudgments = {};      // question_no -> 'correct'|'wrong'|'unmarked'
+        let vlmAbortController = null;  // 切图时 abort 上一次请求
+        let vlmInFlight = false;
 
         // ============ DOM ============
         const canvas = document.getElementById('drawingCanvas');
@@ -1241,6 +1478,8 @@
                 applyZoomMode();
                 initCanvas();
                 restoreAnnotation(item.id);
+                // 触发题号识别（缓存优先）
+                loadQuestionsForItem(item).catch(err => console.warn('VLM 加载失败', err));
             };
 
             updateThumbnail(index);
@@ -1562,6 +1801,7 @@
             annotations[item.id] = serializeAnnotation(item, {
                 status,
                 errors: currentErrors,
+                judgments: judgmentsMapToArray(currentJudgments),
                 startedAt,
                 savedAt: now,
                 durationMs: (existing?.annotation?.total_duration_ms || 0) + duration
@@ -1584,7 +1824,7 @@
             }
         }
 
-        function serializeAnnotation(item, { status, errors, startedAt, savedAt, durationMs }) {
+        function serializeAnnotation(item, { status, errors, judgments, startedAt, savedAt, durationMs }) {
             return {
                 schema_version: SCHEMA_VERSION,
                 image: {
@@ -1598,6 +1838,7 @@
                 annotation: {
                     status,
                     errors: errors.map(e => ({ ...e })),
+                    judgments: Array.isArray(judgments) ? judgments.map(j => ({ ...j })) : [],
                     session_id: sessionId,
                     annotator_id: ANNOTATOR_ID,
                     started_at: startedAt,
@@ -1611,6 +1852,7 @@
         function restoreAnnotation(itemId) {
             const ann = annotations[itemId];
             currentErrors = ann ? ann.annotation.errors.map(e => ({ ...e })) : [];
+            currentJudgments = ann && ann.annotation ? judgmentsArrayToMap(ann.annotation.judgments || []) : {};
             currentErrorType = null;
             currentSubtype = null;
             selectedErrorId = null;
@@ -1649,6 +1891,7 @@
             const data = serializeAnnotation(item, {
                 status,
                 errors: currentErrors,
+                judgments: judgmentsMapToArray(currentJudgments),
                 startedAt: new Date(imageLoadTime[item.id] || Date.now()).toISOString(),
                 savedAt: new Date().toISOString(),
                 durationMs: 0
@@ -1704,17 +1947,383 @@
             }
         }
 
+        // ============ VLM 设置 ============
+        function loadVlmSettings() {
+            try {
+                const baseUrl = localStorage.getItem(VLM_STORAGE_KEYS.baseUrl) || VLM_DEFAULT_BASE_URL;
+                const modelId = localStorage.getItem(VLM_STORAGE_KEYS.modelId) || '';
+                const apiKey = localStorage.getItem(VLM_STORAGE_KEYS.apiKey) || '';
+                return { baseUrl, modelId, apiKey };
+            } catch (e) {
+                return { baseUrl: VLM_DEFAULT_BASE_URL, modelId: '', apiKey: '' };
+            }
+        }
+
+        function hasVlmConfig() {
+            const { modelId, apiKey } = loadVlmSettings();
+            return !!(modelId && apiKey);
+        }
+
+        function updateVlmSettingsBtnState() {
+            const btn = document.getElementById('vlmSettingsBtn');
+            if (!btn) return;
+            btn.classList.toggle('has-config', hasVlmConfig());
+        }
+
+        function openVlmSettings() {
+            const { baseUrl, modelId, apiKey } = loadVlmSettings();
+            document.getElementById('vlmBaseUrl').value = baseUrl;
+            document.getElementById('vlmModelId').value = modelId;
+            document.getElementById('vlmApiKey').value = apiKey;
+            document.getElementById('vlmSettingsOverlay').classList.add('show');
+        }
+
+        function closeVlmSettings() {
+            document.getElementById('vlmSettingsOverlay').classList.remove('show');
+        }
+
+        function saveVlmSettings() {
+            const baseUrl = document.getElementById('vlmBaseUrl').value.trim() || VLM_DEFAULT_BASE_URL;
+            const modelId = document.getElementById('vlmModelId').value.trim();
+            const apiKey = document.getElementById('vlmApiKey').value.trim();
+            try {
+                localStorage.setItem(VLM_STORAGE_KEYS.baseUrl, baseUrl);
+                localStorage.setItem(VLM_STORAGE_KEYS.modelId, modelId);
+                localStorage.setItem(VLM_STORAGE_KEYS.apiKey, apiKey);
+            } catch (e) {
+                showToast('localStorage 写入失败');
+                return;
+            }
+            updateVlmSettingsBtnState();
+            closeVlmSettings();
+            showToast('✓ VLM 设置已保存');
+            // 用户点 ↻ 才主动重识别，避免自动触发带来的网络/计费意外
+        }
+
+        // ============ VLM 调用 ============
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const result = reader.result || '';
+                    const commaIdx = result.indexOf(',');
+                    resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 三层降级 JSON 解析：直接 → ```json 代码块 → [...] 子串
+        function parseQuestionList(content) {
+            if (!content || typeof content !== 'string') return [];
+            const tryParse = (s) => {
+                try {
+                    const v = JSON.parse(s);
+                    if (Array.isArray(v)) return v;
+                } catch (_) {}
+                return null;
+            };
+            // 1. 直接
+            let arr = tryParse(content.trim());
+            if (arr) return normalizeQuestionItems(arr);
+            // 2. ```json ... ```
+            const fence = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+            if (fence) {
+                arr = tryParse(fence[1].trim());
+                if (arr) return normalizeQuestionItems(arr);
+            }
+            // 3. [...] 子串
+            const bracket = content.match(/\[\s*(?:\{[\s\S]*\})?\s*\]/);
+            if (bracket) {
+                arr = tryParse(bracket[0]);
+                if (arr) return normalizeQuestionItems(arr);
+            }
+            console.warn('VLM 返回内容无法解析为题号数组', content);
+            return [];
+        }
+
+        function normalizeQuestionItems(arr) {
+            const seen = new Set();
+            const out = [];
+            for (const item of arr) {
+                let q = null;
+                if (typeof item === 'string') q = item;
+                else if (item && typeof item === 'object') q = item.question_no || item.no || item.id || item.text;
+                if (q == null) continue;
+                q = String(q).trim();
+                if (!q || seen.has(q)) continue;
+                seen.add(q);
+                out.push({ question_no: q });
+            }
+            return out;
+        }
+
+        async function callVLM(imageFile, signal) {
+            const { baseUrl, modelId, apiKey } = loadVlmSettings();
+            if (!modelId || !apiKey) {
+                return { ok: false, reason: 'no_config' };
+            }
+            const base64 = await fileToBase64(imageFile);
+            const endpoint = baseUrl.replace(/\/+$/, '') + '/chat/completions';
+            const body = {
+                model: modelId,
+                messages: [
+                    { role: 'system', content: '你是题号识别助手。识别图片中所有可见的小题题号（例如 1、2、1(1)、1(2)、二·3 等）。只输出 JSON 数组，每项为 {"question_no":"<题号字符串>"}。题号顺序按图片从上到下、从左到右。不要输出任何其他文字或解释。' },
+                    { role: 'user', content: [
+                        { type: 'text', text: '请列出这张试卷图上的所有小题题号。' },
+                        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } }
+                    ]}
+                ],
+                temperature: 0
+            };
+            let resp;
+            try {
+                resp = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body),
+                    signal
+                });
+            } catch (e) {
+                if (e && e.name === 'AbortError') return { ok: false, reason: 'aborted' };
+                return { ok: false, reason: 'network', message: String(e && e.message || e) };
+            }
+            if (!resp.ok) {
+                let detail = '';
+                try { detail = await resp.text(); } catch (_) {}
+                return { ok: false, reason: 'http', status: resp.status, message: detail.slice(0, 500) };
+            }
+            let data;
+            try { data = await resp.json(); }
+            catch (e) { return { ok: false, reason: 'bad_json', message: String(e && e.message || e) }; }
+            const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+            const items = parseQuestionList(content);
+            return { ok: true, items };
+        }
+
+        // ============ VLM 缓存 ============
+        function vlmCacheKey(sourceHash) {
+            return VLM_CACHE_PREFIX + sourceHash;
+        }
+        function readVlmCache(sourceHash) {
+            if (!sourceHash) return null;
+            try {
+                const raw = localStorage.getItem(vlmCacheKey(sourceHash));
+                if (!raw) return null;
+                const v = JSON.parse(raw);
+                if (Array.isArray(v)) return v;
+            } catch (_) {}
+            return null;
+        }
+        function writeVlmCache(sourceHash, items) {
+            if (!sourceHash) return;
+            try {
+                localStorage.setItem(vlmCacheKey(sourceHash), JSON.stringify(items));
+            } catch (e) {
+                console.warn('VLM 缓存写入失败', e);
+            }
+        }
+
+        // ============ 题号栏 UI ============
+        const JUDGMENT_CYCLE = ['unmarked', 'correct', 'wrong'];
+
+        function renderQuestionBar() {
+            const bar = document.getElementById('questionBar');
+            const status = document.getElementById('qbStatus');
+            const list = document.getElementById('qbList');
+            const refresh = document.getElementById('qbRefresh');
+            if (!taskItems[currentIndex]) {
+                bar.classList.remove('show');
+                return;
+            }
+            bar.classList.add('show');
+
+            // 状态文本
+            if (vlmInFlight) {
+                status.className = 'question-bar-status loading';
+                status.innerHTML = '<span class="question-bar-mini-spinner"></span>识别中...';
+            } else if (!hasVlmConfig()) {
+                status.className = 'question-bar-status error';
+                status.textContent = '未配置 VLM，点⚙设置';
+            } else if (currentQuestionList.length === 0) {
+                status.className = 'question-bar-status';
+                status.textContent = '未识别到题号';
+            } else {
+                const correct = Object.values(currentJudgments).filter(s => s === 'correct').length;
+                const wrong = Object.values(currentJudgments).filter(s => s === 'wrong').length;
+                status.className = 'question-bar-status';
+                status.textContent = `共 ${currentQuestionList.length} 题 · 对 ${correct} · 错 ${wrong}`;
+            }
+            refresh.disabled = vlmInFlight || !hasVlmConfig();
+
+            // 题号按钮
+            list.innerHTML = '';
+            for (const { question_no } of currentQuestionList) {
+                const btn = document.createElement('button');
+                btn.className = 'qbtn';
+                const st = currentJudgments[question_no] || 'unmarked';
+                if (st !== 'unmarked') btn.classList.add(st);
+                btn.textContent = question_no;
+                btn.title = `${question_no} — 点击切换 (未判→对→错)`;
+                btn.onclick = () => onQuestionClick(question_no);
+                list.appendChild(btn);
+            }
+        }
+
+        function onQuestionClick(questionNo) {
+            const cur = currentJudgments[questionNo] || 'unmarked';
+            const idx = JUDGMENT_CYCLE.indexOf(cur);
+            const next = JUDGMENT_CYCLE[(idx + 1) % JUDGMENT_CYCLE.length];
+            if (next === 'unmarked') delete currentJudgments[questionNo];
+            else currentJudgments[questionNo] = next;
+            // 同步进 annotations[item.id]，保证导出可见
+            const item = taskItems[currentIndex];
+            if (item) {
+                const ann = annotations[item.id];
+                if (ann && ann.annotation) {
+                    ann.annotation.judgments = judgmentsMapToArray(currentJudgments);
+                }
+            }
+            renderQuestionBar();
+            scheduleLocalStorage();
+        }
+
+        function judgmentsMapToArray(map) {
+            return Object.entries(map).map(([q, s]) => ({ question_no: q, status: s }));
+        }
+
+        function judgmentsArrayToMap(arr) {
+            const m = {};
+            if (Array.isArray(arr)) {
+                for (const j of arr) {
+                    if (j && j.question_no && JUDGMENT_CYCLE.includes(j.status)) {
+                        m[j.question_no] = j.status;
+                    }
+                }
+            }
+            return m;
+        }
+
+        // ============ 题号加载（缓存优先，否则调 VLM） ============
+        async function loadQuestionsForItem(item, opts = {}) {
+            if (!item) return;
+            const { force = false } = opts;
+
+            // 切图前先 abort 旧请求
+            if (vlmAbortController) {
+                try { vlmAbortController.abort(); } catch (_) {}
+                vlmAbortController = null;
+            }
+
+            // 不在配置且不强刷：直接渲染占位
+            if (!hasVlmConfig()) {
+                vlmInFlight = false;
+                currentQuestionList = [];
+                currentJudgments = judgmentsArrayToMap(annotations[item.id]?.annotation?.judgments || []);
+                renderQuestionBar();
+                return;
+            }
+
+            // 计算 hash（懒计算）
+            if (!item.sourceHash) {
+                item.sourceHash = await computeSha256(item.imageFile);
+            }
+
+            // 缓存优先
+            if (!force) {
+                const cached = readVlmCache(item.sourceHash);
+                if (cached) {
+                    currentQuestionList = cached;
+                    currentJudgments = judgmentsArrayToMap(annotations[item.id]?.annotation?.judgments || []);
+                    vlmInFlight = false;
+                    renderQuestionBar();
+                    return;
+                }
+            }
+
+            // 调 VLM
+            vlmInFlight = true;
+            vlmAbortController = new AbortController();
+            renderQuestionBar();
+            try {
+                const result = await callVLM(item.imageFile, vlmAbortController.signal);
+                if (result.reason === 'aborted') return;  // 已被下一张图中断
+                if (!result.ok) {
+                    vlmInFlight = false;
+                    currentQuestionList = [];
+                    let msg = '识别失败';
+                    if (result.reason === 'http') msg = `VLM HTTP ${result.status}`;
+                    else if (result.reason === 'network') msg = '网络错误';
+                    else if (result.reason === 'bad_json') msg = 'VLM 返回非 JSON';
+                    const status = document.getElementById('qbStatus');
+                    status.className = 'question-bar-status error';
+                    status.textContent = msg + '（点↻重试）';
+                    document.getElementById('qbList').innerHTML = '';
+                    document.getElementById('qbRefresh').disabled = false;
+                    console.warn('VLM 调用失败', result);
+                    return;
+                }
+                currentQuestionList = result.items;
+                writeVlmCache(item.sourceHash, currentQuestionList);
+                // judgments 跟现有 annotations 对齐（清理已不存在的题号）
+                const stored = annotations[item.id]?.annotation?.judgments || [];
+                const storedMap = judgmentsArrayToMap(stored);
+                const newMap = {};
+                for (const { question_no } of currentQuestionList) {
+                    if (storedMap[question_no]) newMap[question_no] = storedMap[question_no];
+                }
+                currentJudgments = newMap;
+                // 把清理后的 judgments 立即同步进 annotations[item.id]，避免后续 restoreAnnotation
+                // 用旧的（已不在新题号列表里的）judgments 覆盖内存
+                if (annotations[item.id] && annotations[item.id].annotation) {
+                    annotations[item.id].annotation.judgments = judgmentsMapToArray(newMap);
+                }
+                vlmInFlight = false;
+                renderQuestionBar();
+            } finally {
+                vlmInFlight = false;
+                vlmAbortController = null;
+            }
+        }
+
+        async function refreshQuestions() {
+            const item = taskItems[currentIndex];
+            if (!item) return;
+            if (!hasVlmConfig()) {
+                openVlmSettings();
+                return;
+            }
+            // 强制刷新：清缓存再调
+            if (item.sourceHash) {
+                try { localStorage.removeItem(vlmCacheKey(item.sourceHash)); } catch (_) {}
+            }
+            await loadQuestionsForItem(item, { force: true });
+        }
+
         // ============ 导出 ============
         // 为某 taskItem 构造导出用的 annotation 对象。
         // 有 errors：用内存里的标注；无 errors：合成 no_badcase 占位对象（不写回 annotations）。
         function buildExportAnnotation(item, nowIso) {
             const stored = annotations[item.id];
+            // judgments 优先从 stored 取（保证切图后导出仍带历史判题）
+            const judgments = (stored && stored.annotation && stored.annotation.judgments)
+                ? stored.annotation.judgments
+                : (item && item.id === (taskItems[currentIndex] && taskItems[currentIndex].id)
+                    ? judgmentsMapToArray(currentJudgments)
+                    : []);
             if (stored && stored.annotation && stored.annotation.errors && stored.annotation.errors.length > 0) {
+                // 顺手补 judgments 字段，避免旧版本写入的数据缺字段
+                if (!stored.annotation.judgments) stored.annotation.judgments = judgments;
                 return stored;
             }
             const synthesized = serializeAnnotation(item, {
                 status: 'no_badcase',
                 errors: [],
+                judgments,
                 startedAt: (stored && stored.annotation && stored.annotation.started_at) || nowIso,
                 savedAt: (stored && stored.annotation && stored.annotation.saved_at) || nowIso,
                 durationMs: (stored && stored.annotation && stored.annotation.total_duration_ms) || 0
@@ -1944,9 +2553,11 @@
         // ============ 启动 ============
         document.addEventListener('DOMContentLoaded', () => {
             loadTaxonomy();
+            updateVlmSettingsBtnState();
         });
         // 兜底：若 DOMContentLoaded 已触发
         loadTaxonomy();
+        updateVlmSettingsBtnState();
     </script>
 </body>
 </html>

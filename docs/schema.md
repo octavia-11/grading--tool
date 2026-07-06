@@ -92,6 +92,9 @@ For multi-annotator (v2+), `annotations/` contains `<annotator_id>.json` per ann
 | `image.metadata` | object | ✓ | Pass-through from `metadata.yaml`. Always includes `task_ids`. |
 | `annotation.status` | enum | ✓ | One of: `pending`, `annotated`, `no_badcase`, `skipped`. `no_badcase` = reviewed, no errors found (added v1.0, replaces most uses of `skipped`). `skipped` = legacy "user clicked skip", kept for backward compat. v2 adds `reviewed`, `adjudicated`. |
 | `annotation.errors` | array | ✓ | Empty array if status is `no_badcase`, `skipped`, or `pending`. |
+| `annotation.judgments` | array | ✓ | Per-sub-question correctness judgments from the VLM-powered bottom bar. Empty array if never judged or VLM never configured. |
+| `judgments[].question_no` | string | ✓ | Sub-question number as printed on the paper (e.g., `1`, `1(1)`, `2(2)`). Free-form string from VLM; not validated against a controlled vocab. |
+| `judgments[].status` | enum | ✓ | One of: `correct`, `wrong`, `unmarked`. `unmarked` is the implicit default before user clicks; explicitly stored only when re-marking after a prior correct/wrong. |
 | `errors[].error_id` | string | ✓ | Unique within this file. Format: `err_NN`. |
 | `errors[].error_type` | string | ✓ | References `taxonomy.categories[].id`. |
 | `errors[].error_subtype` | string \| null | | References `taxonomy.categories[].subtypes[].id`. |

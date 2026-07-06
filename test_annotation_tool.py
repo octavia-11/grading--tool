@@ -511,6 +511,179 @@ async def run_tests():
             print(f"  ✓ 导出全部 {total_images} 张图（1 annotated + {total_images-1} no_badcase），无 error_info.txt / marked_*.jpg")
             passed += 1
 
+            # 测试 17: VLM 设置面板（开/存/读）
+            print("\n[测试 17] VLM 设置面板...")
+            gear = page.locator("#vlmSettingsBtn")
+            await gear.click()
+            await asyncio.sleep(0.2)
+            overlay = page.locator("#vlmSettingsOverlay")
+            assert await overlay.evaluate("el => el.classList.contains('show')"), "设置面板未展开"
+
+            await page.evaluate("""() => {
+                document.getElementById('vlmBaseUrl').value = 'https://example.com/api/v1';
+                document.getElementById('vlmModelId').value = 'doubao-test-model';
+                document.getElementById('vlmApiKey').value = 'sk-test-key';
+            }""")
+            await page.locator(".settings-actions .primary").click()
+            await asyncio.sleep(0.2)
+            assert not await overlay.evaluate("el => el.classList.contains('show')"), "保存后面板应关闭"
+            # localStorage 已写入
+            stored = await page.evaluate("""() => ({
+                baseUrl: localStorage.getItem('vlm:baseUrl'),
+                modelId: localStorage.getItem('vlm:modelId'),
+                apiKey: localStorage.getItem('vlm:apiKey')
+            })""")
+            assert stored["baseUrl"] == "https://example.com/api/v1", f"baseUrl 未写入: {stored}"
+            assert stored["modelId"] == "doubao-test-model"
+            assert stored["apiKey"] == "sk-test-key"
+            # 齿轮有 has-config 标记
+            assert await gear.evaluate("el => el.classList.contains('has-config')"), "齿轮未显示已配置标记"
+            print("  ✓ 设置面板：开/存/读完整，齿轮 has-config 标记正确")
+            passed += 1
+
+            # 测试 18: 题号按钮三态循环点击
+            print("\n[测试 18] 题号按钮三态循环...")
+            # Stub callVLM，避免真实网络调用
+            await page.evaluate("""
+                () => {
+                    callVLM = async (file, signal) => ({
+                        ok: true,
+                        items: [
+                            {question_no:'1(1)'},
+                            {question_no:'1(2)'},
+                            {question_no:'2'}
+                        ]
+                    });
+                }
+            """)
+            # 跳到第 3 张（应为 pending），避免污染测试 10/11 的状态
+            await page.evaluate("() => loadImage(2)")
+            await page.wait_for_function("document.getElementById('previewImage').naturalWidth > 0", timeout=3000)
+            # 等 VLM stub 返回（异步）
+            await page.wait_for_function("document.querySelectorAll('.qbtn').length === 3", timeout=3000)
+            # 底栏应显示，3 个按钮
+            bar = page.locator("#questionBar")
+            assert await bar.evaluate("el => el.classList.contains('show')"), "底栏未显示"
+            btns = page.locator(".qbtn")
+            await expect(btns).to_have_count(3)
+
+            # 点击第 1 个：unmarked → correct
+            await btns.nth(0).click()
+            cls = await btns.nth(0).get_attribute("class")
+            assert "correct" in cls, f"第 1 次点击应切到 correct，class={cls}"
+            # 再点：correct → wrong
+            await btns.nth(0).click()
+            cls = await btns.nth(0).get_attribute("class")
+            assert "wrong" in cls, f"第 2 次点击应切到 wrong，class={cls}"
+            # 再点：wrong → unmarked（class 移除）
+            await btns.nth(0).click()
+            cls = await btns.nth(0).get_attribute("class")
+            assert cls == "qbtn", f"第 3 次点击应回到 unmarked，class={cls}"
+            # judgments 同步进 annotations[item.id]
+            judgments_in_ann = await page.evaluate("""() => {
+                const item = taskItems[currentIndex];
+                return annotations[item.id]?.annotation?.judgments || [];
+            }""")
+            assert judgments_in_ann == [], f"unmarked 后 judgments 应清空，实际: {judgments_in_ann}"
+
+            # 点第 2 个按钮到 correct，验证保留
+            await btns.nth(1).click()
+            judgments_in_ann = await page.evaluate("""() => {
+                const item = taskItems[currentIndex];
+                return annotations[item.id]?.annotation?.judgments || [];
+            }""")
+            assert any(j["question_no"]=="1(2)" and j["status"]=="correct" for j in judgments_in_ann), \
+                f"第 2 个按钮的 correct 应同步到 judgments，实际: {judgments_in_ann}"
+            print("  ✓ 三态循环 unmarked→correct→wrong→unmarked + judgments 同步")
+            passed += 1
+
+            # 测试 19: serializeAnnotation 含 judgments 字段
+            print("\n[测试 19] serializeAnnotation 含 judgments...")
+            v2_obj = await page.evaluate("""
+                () => {
+                    const item = taskItems[currentIndex];
+                    return serializeAnnotation(item, {
+                        status: 'annotated',
+                        errors: [],
+                        judgments: [
+                            {question_no:'1', status:'correct'},
+                            {question_no:'2', status:'wrong'}
+                        ],
+                        startedAt: '2026-06-29T10:00:00Z',
+                        savedAt: '2026-06-29T10:01:00Z',
+                        durationMs: 60000
+                    });
+                }
+            """)
+            assert "judgments" in v2_obj["annotation"], "annotation 缺 judgments 字段"
+            assert len(v2_obj["annotation"]["judgments"]) == 2
+            assert v2_obj["annotation"]["judgments"][0]["question_no"] == "1"
+            assert v2_obj["annotation"]["judgments"][0]["status"] == "correct"
+            # 缺 judgments 参数应兜底为空数组
+            v2_no_j = await page.evaluate("""
+                () => {
+                    const item = taskItems[currentIndex];
+                    return serializeAnnotation(item, {
+                        status: 'no_badcase', errors: [],
+                        startedAt:'t', savedAt:'t', durationMs:0
+                    });
+                }
+            """)
+            assert v2_no_j["annotation"]["judgments"] == [], "judgments 默认应为空数组"
+            print("  ✓ serializeAnnotation 正确处理 judgments（含/缺）")
+            passed += 1
+
+            # 测试 20: parseQuestionList 防御式解析
+            print("\n[测试 20] parseQuestionList 防御式解析...")
+            cases = await page.evaluate("""
+                () => [
+                    {
+                        name: '纯JSON',
+                        input: '[{"question_no":"1"},{"question_no":"1(1)"}]',
+                        expect: 2
+                    },
+                    {
+                        name: '代码块包裹',
+                        input: '好的，这是结果：\\n```json\\n[{"question_no":"1"}]\\n```\\n希望有帮助',
+                        expect: 1
+                    },
+                    {
+                        name: '裸方括号子串',
+                        input: '我识别到这些题号：\\n[{"question_no":"2"},{"question_no":"3"}]\\n如上',
+                        expect: 2
+                    },
+                    {
+                        name: '杂项字符串',
+                        input: '抱歉，图片没有可识别的题号',
+                        expect: 0
+                    },
+                    {
+                        name: '字符串数组归一',
+                        input: '["1","2","3"]',
+                        expect: 3
+                    },
+                    {
+                        name: '对象数组不同字段名',
+                        input: '[{"no":"1(1)"},{"text":"2"}]',
+                        expect: 2
+                    },
+                    {
+                        name: '重复题号去重',
+                        input: '[{"question_no":"1"},{"question_no":"1"},{"question_no":"2"}]',
+                        expect: 2
+                    }
+                ].map(c => ({
+                    name: c.name,
+                    expect: c.expect,
+                    actual: parseQuestionList(c.input).length
+                }))
+            """)
+            for c in cases:
+                assert c["actual"] == c["expect"], \
+                    f"parseQuestionList[{c['name']}] 期望 {c['expect']} 实际 {c['actual']}"
+            print(f"  ✓ parseQuestionList 7 个降级 case 全过")
+            passed += 1
+
         except Exception as e:
             print(f"  ✗ 测试失败: {e}")
             failed += 1

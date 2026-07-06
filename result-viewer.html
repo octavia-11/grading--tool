@@ -812,6 +812,35 @@
             background: #95a5a6;
         }
 
+        .jchip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .jchip {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            min-width: 32px;
+            border: 1px solid #d9d9d9;
+            background: white;
+            color: #555;
+            border-radius: 12px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .jchip.correct {
+            background: #f6ffed;
+            color: #389e0d;
+            border-color: #b7eb8f;
+        }
+        .jchip.wrong {
+            background: #fff1f0;
+            color: #d4380d;
+            border-color: #ffccc7;
+        }
+
         /* 缩略图预览 */
         .thumb-preview {
             width: 100%;
@@ -1528,6 +1557,8 @@
                     </div>
                 </div>
 
+                ${renderJudgmentsCard(ann.judgments)}
+
                 <div class="info-section">
                     <div class="info-section-title">详细信息</div>
                     <div class="info-row">
@@ -1556,6 +1587,28 @@
                     </div>
                     <div id="errorListView">${renderErrorListView(errors)}</div>
                     <div id="errorEditView" style="display:none;"></div>
+                </div>
+            `;
+        }
+
+        // 只读模式：judgments（题号判题）卡片
+        function renderJudgmentsCard(judgments) {
+            if (!Array.isArray(judgments) || judgments.length === 0) return '';
+            const valid = judgments.filter(j => j && j.question_no);
+            if (valid.length === 0) return '';
+            const correct = valid.filter(j => j.status === 'correct').length;
+            const wrong = valid.filter(j => j.status === 'wrong').length;
+            const unmarked = valid.length - correct - wrong;
+            const chips = valid.map(j => {
+                const st = j.status || 'unmarked';
+                const cls = st === 'correct' ? 'jchip correct' : (st === 'wrong' ? 'jchip wrong' : 'jchip');
+                return `<span class="${cls}" title="${escapeHtml(st)}">${escapeHtml(j.question_no)}</span>`;
+            }).join('');
+            return `
+                <div class="info-section">
+                    <div class="info-section-title">题号判题</div>
+                    <div style="font-size:12px;color:#888;margin-top:6px;">共 ${valid.length} 题 · 对 ${correct} · 错 ${wrong} · 未判 ${unmarked}</div>
+                    <div class="jchip-row">${chips}</div>
                 </div>
             `;
         }
@@ -1846,6 +1899,10 @@
                         updated_at: e.updated_at || new Date().toISOString(),
                         duration_ms: e.duration_ms || null
                     })),
+                    judgments: Array.isArray(ann.judgments)
+                        ? ann.judgments.map(j => ({ question_no: j.question_no, status: j.status || 'unmarked' }))
+                            .filter(j => j.question_no)
+                        : [],
                     session_id: ann.session_id || null,
                     annotator_id: ann.annotator_id || ANNOTATOR_ID,
                     started_at: ann.started_at || null,
