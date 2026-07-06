@@ -405,6 +405,87 @@ async def run_tests():
             print(f"  ✓ bbox overlay CSS 缩放正确（canvas {sizing['canvasW']:.0f}×{sizing['canvasH']:.0f}，natural 800x600）")
             passed += 1
 
+            # ============ 测试 16: 排序 + 徽章（badcase 优先 / 无 badcase 次之） ============
+            print("\n[测试 16] 排序 + 徽章...")
+            # 重新注入混合数据：1 个 annotated + 2 个 no_badcase，故意乱序
+            await page.evaluate("""
+                async () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 800; canvas.height = 600;
+                    const dataUrl = canvas.toDataURL('image/jpeg');
+
+                    function mkErr(eid) {
+                        return {
+                            error_id: eid, error_type: 'ocr', error_subtype: 'char_wrong',
+                            severity: null, comment: 'x',
+                            marks: [{ mark_id: 'm_'+eid, role: 'primary', type: 'bbox',
+                                      geometry: { bbox: [10,10,50,50], points: null },
+                                      color: null, width: 2 }],
+                            annotator_id: 'default',
+                            created_at: '2026-06-10T12:00:00Z', updated_at: '2026-06-10T12:00:00Z',
+                            duration_ms: 1000
+                        };
+                    }
+
+                    resultItems = [
+                        {
+                            taskId: 'clean-001', folderName: 'clean-001', imageName: 'source.jpg',
+                            imageUrl: dataUrl, schemaVersion: '1.0', source: 'v2',
+                            annotation: { status: 'no_badcase', errors: [], session_id: 's',
+                                          annotator_id: 'default', started_at: '2026-06-10T12:00:00Z',
+                                          saved_at: '2026-06-10T12:01:00Z' }
+                        },
+                        {
+                            taskId: 'badcase-001', folderName: 'badcase-001', imageName: 'source.jpg',
+                            imageUrl: dataUrl, schemaVersion: '1.0', source: 'v2',
+                            annotation: { status: 'annotated', errors: [mkErr('err_01')],
+                                          session_id: 's', annotator_id: 'default',
+                                          started_at: '2026-06-10T12:00:00Z',
+                                          saved_at: '2026-06-10T12:01:00Z' }
+                        },
+                        {
+                            taskId: 'clean-002', folderName: 'clean-002', imageName: 'source.jpg',
+                            imageUrl: dataUrl, schemaVersion: '1.0', source: 'v2',
+                            annotation: { status: 'no_badcase', errors: [], session_id: 's',
+                                          annotator_id: 'default', started_at: '2026-06-10T12:00:00Z',
+                                          saved_at: '2026-06-10T12:01:00Z' }
+                        }
+                    ];
+
+                    sortResultItemsByBadcase();
+                    currentIndex = 0;
+                    initUI();
+                    loadTask(0);
+                }
+            """)
+            await asyncio.sleep(0.4)
+
+            # 排序后：第 1 项应是 badcase-001（唯一有 errors 的）
+            task_ids = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('.task-item .task-id'))
+                          .map(el => el.textContent.trim())
+            """)
+            assert task_ids[0] == 'badcase-001', \
+                f"排序后首位应为 badcase-001，实际: {task_ids[0]}"
+            assert set(task_ids[1:]) == {'clean-001', 'clean-002'}, \
+                f"无 badcase 项应排在后面，实际: {task_ids}"
+
+            # 徽章：第 1 项 = "1 个错误"，后两项 = "无 badcase"
+            badges = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('.task-item .badge'))
+                          .map(el => el.textContent.trim())
+            """)
+            assert badges[0] == '1 个错误', f"首项徽章应为 '1 个错误'，实际: {badges[0]}"
+            assert badges[1] == '无 badcase', f"第 2 项徽章应为 '无 badcase'，实际: {badges[1]}"
+            assert badges[2] == '无 badcase', f"第 3 项徽章应为 '无 badcase'，实际: {badges[2]}"
+
+            # 统计行：1 错误 · 1 有 / 2 无 · 3 任务
+            stats_html = await page.locator("#totalBadcaseInfo").text_content()
+            assert '1' in stats_html and '2' in stats_html and '3' in stats_html, \
+                f"统计行应反映 1 错误/1 有/2 无/3 任务，实际: {stats_html}"
+            print(f"  ✓ 排序正确（badcase 优先），徽章 + 统计同步更新")
+            passed += 1
+
         except Exception as e:
             print(f"  ✗ 测试失败: {e}")
             failed += 1

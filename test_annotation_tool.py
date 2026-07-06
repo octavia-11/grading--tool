@@ -454,9 +454,9 @@ async def run_tests():
             print("  ✓ v2 schema 序列化正确")
             passed += 1
 
-            # 测试 16: 导出 ZIP 结构
-            print("\n[测试 16] 导出 ZIP 结构...")
-            # 监听下载
+            # 测试 16: 导出 ZIP 结构（含全部图片：annotated + no_badcase）
+            print("\n[测试 16] 导出 ZIP 结构（全部图片）...")
+            total_images = await page.evaluate("() => taskItems.length")
             async with page.expect_download() as download_info:
                 await page.locator("#exportBtn").click(force=True)
             download = await download_info.value
@@ -471,20 +471,44 @@ async def run_tests():
                 # 不应再有 error_info.txt 或 marked_*.jpg
                 assert not any("error_info.txt" in n for n in names), "新格式不应含 error_info.txt"
                 assert not any(n.startswith("marked_") for n in names), "新格式不应含 marked_*.jpg"
+
+                # 关键：所有图片都应被导出，不论是否标注
+                default_jsons = [n for n in names if n.endswith("annotations/default.json")]
+                assert len(default_jsons) == total_images, \
+                    f"应导出全部 {total_images} 张图，实际 default.json 数: {len(default_jsons)}"
+
                 # 验证 _session.json 内容
                 session_data = json.loads(zf.read("_session.json"))
                 assert session_data["schema_version"] == "1.0"
                 assert session_data["annotator_id"] == "default"
                 assert "status_count" in session_data
-                # 验证 annotations/default.json
-                for n in names:
-                    if n.endswith("annotations/default.json"):
-                        ann_data = json.loads(zf.read(n))
-                        assert ann_data["schema_version"] == "1.0"
-                        assert "errors" in ann_data["annotation"]
-                        assert ann_data["annotation"]["status"] in ("annotated", "skipped")
-                        break
-            print("  ✓ 导出 ZIP 结构正确（无 error_info.txt / marked_*.jpg）")
+                status_count = session_data["status_count"]
+                assert "no_badcase" in status_count, f"status_count 应含 no_badcase 键，实际: {status_count}"
+                # 本测试场景：1 张 annotated + (total-1) 张 no_badcase
+                assert status_count["annotated"] == 1, f"annotated 应为 1，实际: {status_count.get('annotated')}"
+                assert status_count["no_badcase"] == total_images - 1, \
+                    f"no_badcase 应为 {total_images - 1}，实际: {status_count.get('no_badcase')}"
+                assert status_count.get("pending", 0) == 0, f"导出后应无 pending，实际: {status_count.get('pending')}"
+
+                # 验证每个 default.json 的 status 合法，且 annotated 项 errors 非空
+                seen_statuses = []
+                for n in default_jsons:
+                    ann_data = json.loads(zf.read(n))
+                    assert ann_data["schema_version"] == "1.0"
+                    assert "errors" in ann_data["annotation"]
+                    status = ann_data["annotation"]["status"]
+                    assert status in ("annotated", "no_badcase"), \
+                        f"非法 status: {status}，文件: {n}"
+                    seen_statuses.append(status)
+                    if status == "annotated":
+                        assert len(ann_data["annotation"]["errors"]) > 0, \
+                            f"annotated 项 errors 不应为空: {n}"
+                    else:
+                        assert len(ann_data["annotation"]["errors"]) == 0, \
+                            f"no_badcase 项 errors 应为空: {n}"
+                assert "annotated" in seen_statuses, "应至少有一个 annotated 项"
+                assert "no_badcase" in seen_statuses, "应至少有一个 no_badcase 项"
+            print(f"  ✓ 导出全部 {total_images} 张图（1 annotated + {total_images-1} no_badcase），无 error_info.txt / marked_*.jpg")
             passed += 1
 
         except Exception as e:

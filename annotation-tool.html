@@ -1705,39 +1705,67 @@
         }
 
         // ============ 导出 ============
+        // 为某 taskItem 构造导出用的 annotation 对象。
+        // 有 errors：用内存里的标注；无 errors：合成 no_badcase 占位对象（不写回 annotations）。
+        function buildExportAnnotation(item, nowIso) {
+            const stored = annotations[item.id];
+            if (stored && stored.annotation && stored.annotation.errors && stored.annotation.errors.length > 0) {
+                return stored;
+            }
+            const synthesized = serializeAnnotation(item, {
+                status: 'no_badcase',
+                errors: [],
+                startedAt: (stored && stored.annotation && stored.annotation.started_at) || nowIso,
+                savedAt: (stored && stored.annotation && stored.annotation.saved_at) || nowIso,
+                durationMs: (stored && stored.annotation && stored.annotation.total_duration_ms) || 0
+            });
+            // serializeAnnotation 读全局 img 的 naturalWidth/Height，对未访问过的图会泄露当前展示图尺寸。
+            // no_badcase 项无 bbox，下游不需要尺寸信息，置 null 更安全。
+            synthesized.image.width = null;
+            synthesized.image.height = null;
+            return synthesized;
+        }
+
         async function exportResults() {
-            // 强制先把当前编辑写盘
-            persistCurrent();
-            const item = taskItems[currentIndex];
-            if (item) {
-                const stored = loadLocalStorageForItem(item.id);
-                if (stored) annotations[item.id] = stored;
+            if (taskItems.length === 0) {
+                showToast('没有可导出的图片');
+                return;
             }
 
-            const annList = Object.values(annotations).filter(a => a.annotation.status !== 'pending');
-            if (annList.length === 0) {
-                showToast('没有标注数据可导出');
-                return;
+            // 强制先把当前编辑写盘，确保最新状态进入 annotations / localStorage
+            persistCurrent();
+            const currentItem = taskItems[currentIndex];
+            if (currentItem) {
+                const stored = loadLocalStorageForItem(currentItem.id);
+                if (stored) annotations[currentItem.id] = stored;
             }
 
             showLoading('正在打包导出...');
             try {
                 const zip = new JSZip();
-                // 预计算 hash
+                const nowIso = new Date().toISOString();
+
+                // 预计算 hash：所有图都要进 ZIP，hash 也都算
                 for (const item of taskItems) {
-                    if (!annotations[item.id] || annotations[item.id].annotation.status === 'pending') continue;
                     if (!item.sourceHash) {
                         item.sourceHash = await computeSha256(item.imageFile);
                     }
-                    annotations[item.id].image.source_hash = item.sourceHash;
                 }
 
                 const sessionImages = [];
                 const statsRows = [];
+                const errorTypeCount = {};
+                let annotatedCount = 0;
+                let noBadcaseCount = 0;
 
                 for (const item of taskItems) {
-                    const ann = annotations[item.id];
-                    if (!ann || ann.annotation.status === 'pending') continue;
+                    const ann = buildExportAnnotation(item, nowIso);
+                    const status = ann.annotation.errors.length > 0 ? 'annotated' : 'no_badcase';
+                    if (status === 'annotated') annotatedCount++; else noBadcaseCount++;
+
+                    // 确保 source_hash 写入（buildExportAnnotation 复用内存对象时也要补）
+                    ann.image.source_hash = item.sourceHash;
+
                     const taskId = item.taskId;
                     const folder = zip.folder(taskId);
                     const annFolder = folder.folder('annotations');
@@ -1749,7 +1777,7 @@
                     const imgData = await item.imageFile.arrayBuffer();
                     folder.file(`source.${ext}`, imgData);
 
-                    // 派生 stats.jsonl 行
+                    // 派生 stats.jsonl 行 + error_type_count（仅 annotated 项产生）
                     ann.annotation.errors.forEach(err => {
                         const mark = err.marks.find(m => m.role === 'primary') || err.marks[0];
                         statsRows.push({
@@ -1765,28 +1793,17 @@
                             duration_ms: err.duration_ms,
                             saved_at: ann.annotation.saved_at
                         });
+                        errorTypeCount[err.error_type] = (errorTypeCount[err.error_type] || 0) + 1;
                     });
 
                     sessionImages.push({
                         task_id: taskId,
                         source_path: ann.image.source_path,
-                        status: ann.annotation.status,
+                        status,
                         error_count: ann.annotation.errors.length,
                         annotation_file: `${taskId}/annotations/${ANNOTATOR_ID}.json`
                     });
                 }
-
-                // _session.json
-                const statusCount = { annotated: 0, skipped: 0, pending: 0 };
-                const errorTypeCount = {};
-                Object.values(annotations).forEach(a => {
-                    statusCount[a.annotation.status] = (statusCount[a.annotation.status] || 0) + 1;
-                    if (a.annotation.status === 'annotated') {
-                        a.annotation.errors.forEach(e => {
-                            errorTypeCount[e.error_type] = (errorTypeCount[e.error_type] || 0) + 1;
-                        });
-                    }
-                });
 
                 const sessionJson = {
                     schema_version: SCHEMA_VERSION,
@@ -1795,9 +1812,14 @@
                     annotator_name: null,
                     source_folder: taskItems[0]?.folderPath || '',
                     started_at: sessionStartAt,
-                    ended_at: new Date().toISOString(),
+                    ended_at: nowIso,
                     total_images: taskItems.length,
-                    status_count: statusCount,
+                    status_count: {
+                        annotated: annotatedCount,
+                        no_badcase: noBadcaseCount,
+                        skipped: 0,
+                        pending: 0
+                    },
                     error_type_count: errorTypeCount,
                     images: sessionImages
                 };
@@ -1815,7 +1837,7 @@
                 saveAs(content, `批阅标注结果_${ts}.zip`);
 
                 hideLoading();
-                showToast(`✓ 已导出 ${annList.length} 个标注结果`);
+                showToast(`✓ 已导出 ${taskItems.length} 个结果（${annotatedCount} 有 badcase / ${noBadcaseCount} 无 badcase）`);
             } catch (err) {
                 console.error(err);
                 hideLoading();

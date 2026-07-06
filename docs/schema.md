@@ -90,8 +90,8 @@ For multi-annotator (v2+), `annotations/` contains `<annotator_id>.json` per ann
 | `image.source_hash` | string \| null | ✓ | `sha256:<hex>`. `null` if hash computation failed (file:// + SubtleCrypto unavailable). |
 | `image.width`, `image.height` | int \| null | ✓ | Natural pixel dimensions of source image. `null` when the tool serialized before the image finished loading (e.g. file:// + Safari slow load). Consumers should handle null gracefully. |
 | `image.metadata` | object | ✓ | Pass-through from `metadata.yaml`. Always includes `task_ids`. |
-| `annotation.status` | enum | ✓ | One of: `pending`, `annotated`, `skipped`. v2 adds `reviewed`, `adjudicated`. |
-| `annotation.errors` | array | ✓ | Empty array if status is `skipped` or `pending`. |
+| `annotation.status` | enum | ✓ | One of: `pending`, `annotated`, `no_badcase`, `skipped`. `no_badcase` = reviewed, no errors found (added v1.0, replaces most uses of `skipped`). `skipped` = legacy "user clicked skip", kept for backward compat. v2 adds `reviewed`, `adjudicated`. |
+| `annotation.errors` | array | ✓ | Empty array if status is `no_badcase`, `skipped`, or `pending`. |
 | `errors[].error_id` | string | ✓ | Unique within this file. Format: `err_NN`. |
 | `errors[].error_type` | string | ✓ | References `taxonomy.categories[].id`. |
 | `errors[].error_subtype` | string \| null | | References `taxonomy.categories[].subtypes[].id`. |
@@ -130,7 +130,7 @@ For multi-annotator (v2+), `annotations/` contains `<annotator_id>.json` per ann
   "started_at": "2026-06-29T09:55:00Z",
   "ended_at": "2026-06-29T11:20:00Z",
   "total_images": 50,
-  "status_count": { "annotated": 48, "skipped": 2, "pending": 0 },
+  "status_count": { "annotated": 48, "no_badcase": 2, "skipped": 0, "pending": 0 },
   "error_type_count": { "ocr": 12, "topic": 8, "solution": 5, "judgment": 3 },
   "images": [
     {

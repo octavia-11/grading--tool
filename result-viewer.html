@@ -229,6 +229,37 @@
             background: #27ae60;
         }
 
+        .task-image-name {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .badge {
+            flex-shrink: 0;
+            margin-left: 6px;
+            padding: 1px 6px;
+            font-size: 10px;
+            line-height: 1.5;
+            border-radius: 10px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .badge-badcase {
+            background: #fff1f0;
+            color: #d4380d;
+            border: 1px solid #ffccc7;
+        }
+
+        .badge-clean {
+            background: #f6ffed;
+            color: #389e0d;
+            border: 1px solid #b7eb8f;
+        }
+
         /* 中间图片区域 */
         .image-area {
             flex: 1;
@@ -1129,7 +1160,17 @@
                 if (item) resultItems.push(item);
             }
 
+            sortResultItemsByBadcase();
             applyLocalEdits();
+        }
+
+        // 排序：有 badcase 优先，无 badcase 次之；组内保留原顺序（Array.prototype.sort 在主流引擎稳定）
+        function sortResultItemsByBadcase() {
+            resultItems.sort((a, b) => {
+                const aHas = (a.annotation?.errors?.length ?? 0) > 0 ? 1 : 0;
+                const bHas = (b.annotation?.errors?.length ?? 0) > 0 ? 1 : 0;
+                return bHas - aHas;
+            });
         }
 
         async function parseDirToItem(dir) {
@@ -1180,6 +1221,7 @@
 
             // 深拷贝 annotation，保持后续编辑不影响原始数据
             const annotation = JSON.parse(JSON.stringify(data.annotation || { status: 'pending', errors: [] }));
+            normalizeAnnotationStatus(annotation);
 
             return {
                 taskId,
@@ -1228,7 +1270,7 @@
                 schemaVersion: 'legacy',
                 source: 'legacy',
                 annotation: {
-                    status: errors.length > 0 ? 'annotated' : 'pending',
+                    status: errors.length > 0 ? 'annotated' : 'no_badcase',
                     errors,
                     session_id: null,
                     annotator_id: 'legacy',
@@ -1243,6 +1285,18 @@
                     }
                 }
             };
+        }
+
+        // 把 skipped/pending/异常状态统一到 annotated | no_badcase 两种语义，
+        // 让下游排序与徽章只需看一种 status。
+        function normalizeAnnotationStatus(annotation) {
+            if (!annotation) return;
+            const hasErrors = Array.isArray(annotation.errors) && annotation.errors.length > 0;
+            if (hasErrors) {
+                annotation.status = 'annotated';
+            } else if (annotation.status !== 'annotated') {
+                annotation.status = 'no_badcase';
+            }
         }
 
         function isImageFile(name) {
@@ -1309,13 +1363,15 @@
         function updateTotalBadcase() {
             let total = 0;
             let tasksWithBadcase = 0;
+            let tasksNoBadcase = 0;
             for (const item of resultItems) {
                 const c = (item.annotation && item.annotation.errors || []).length;
                 total += c;
                 if (c > 0) tasksWithBadcase++;
+                else tasksNoBadcase++;
             }
             const el = document.getElementById('totalBadcaseInfo');
-            el.innerHTML = `共 <span class="total-num">${total}</span> 个错误 · ${tasksWithBadcase} 个任务`;
+            el.innerHTML = `共 <span class="total-num">${total}</span> 个错误 · ${tasksWithBadcase} 有 badcase / ${tasksNoBadcase} 无 badcase · ${resultItems.length} 任务`;
             el.style.display = 'inline-flex';
         }
 
@@ -1328,17 +1384,20 @@
 
             resultItems.forEach((item, i) => {
                 const div = document.createElement('div');
-                div.className = 'task-item' + (i === 0 ? ' active' : '');
+                div.className = 'task-item' + (i === currentIndex ? ' active' : '');
                 div.onclick = () => loadTask(i);
 
                 const errorCount = (item.annotation && item.annotation.errors || []).length;
                 const hasInfo = errorCount > 0;
+                const badgeHtml = hasInfo
+                    ? `<span class="badge badge-badcase">${errorCount} 个错误</span>`
+                    : `<span class="badge badge-clean">无 badcase</span>`;
 
                 div.innerHTML = `
                     <div class="task-id">${escapeHtml(item.taskId)}</div>
                     <div class="task-meta">
-                        <span>${escapeHtml(item.imageName || '-')}</span>
-                        <span class="task-status ${hasInfo ? 'has-info' : ''}"></span>
+                        <span class="task-image-name">${escapeHtml(item.imageName || '-')}</span>
+                        ${badgeHtml}
                     </div>
                 `;
                 body.appendChild(div);
@@ -1440,7 +1499,7 @@
         // ============ 渲染信息面板 ============
         function renderInfoPanel(item) {
             const body = document.getElementById('infoPanelBody');
-            const ann = item.annotation || (item.annotation = { status: 'pending', errors: [] });
+            const ann = item.annotation || (item.annotation = { status: 'no_badcase', errors: [] });
             const errors = ann.errors || (ann.errors = []);
             const errorCount = errors.length;
 
@@ -1669,8 +1728,11 @@
                 duration_ms: null
             };
             item.annotation.errors.push(newError);
-            if (item.annotation.status === 'pending') item.annotation.status = 'annotated';
+            if (item.annotation.status !== 'annotated') item.annotation.status = 'annotated';
             renderErrorEditViewInner(item);
+            renderTaskList();
+            updateTotalBadcase();
+            renderBBoxOverlay(item);
             scheduleAutoSave(item);
         }
 
@@ -1678,8 +1740,10 @@
             const item = resultItems[currentIndex];
             if (!item) return;
             item.annotation.errors = item.annotation.errors.filter(e => e.error_id !== errorId);
-            if (item.annotation.errors.length === 0) item.annotation.status = 'pending';
+            if (item.annotation.errors.length === 0) item.annotation.status = 'no_badcase';
             renderErrorEditViewInner(item);
+            renderTaskList();
+            updateTotalBadcase();
             renderBBoxOverlay(item);
             scheduleAutoSave(item);
         }
@@ -1762,7 +1826,7 @@
                 schema_version: SCHEMA_VERSION,
                 image: baseImage,
                 annotation: {
-                    status: ann.status || (ann.errors.length > 0 ? 'annotated' : 'pending'),
+                    status: ann.status || (ann.errors.length > 0 ? 'annotated' : 'no_badcase'),
                     errors: ann.errors.map(e => ({
                         error_id: e.error_id,
                         error_type: e.error_type,
