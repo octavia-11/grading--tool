@@ -655,6 +655,39 @@ async def run_tests():
             print("  ✓ 三态循环 unmarked→correct→wrong→unmarked + paper.judgments 同步 + localStorage 持久化")
             passed += 1
 
+            # 测试 18b: VLM 错误展示应包含底层错误码/正文
+            print("\n[测试 18b] VLM 错误展示保留原始错误信息...")
+            await page.evaluate("""
+                () => {
+                    callVLMPaper = async (paper, signal) => ({
+                        ok: false,
+                        reason: 'http',
+                        status: 401,
+                        message: JSON.stringify({
+                            error: {
+                                code: 'AuthenticationError',
+                                message: 'API key is invalid'
+                            }
+                        })
+                    });
+                    const pid = taskItems[1].paperId;
+                    papers[pid].questionList = [];
+                    papers[pid].error = null;
+                    clearPaperCache(pid);
+                }
+            """)
+            await page.evaluate("() => loadImage(1)")
+            await page.wait_for_function(
+                "() => document.getElementById('qbStatus').textContent.includes('AuthenticationError')",
+                timeout=3000
+            )
+            err_text = await page.locator("#qbStatus").text_content()
+            assert "VLM HTTP 401" in err_text, f"HTTP 状态码应显示，实际: {err_text}"
+            assert "AuthenticationError" in err_text, f"原始错误 code 应显示，实际: {err_text}"
+            assert "API key is invalid" in err_text, f"原始错误 message 应显示，实际: {err_text}"
+            print("  ✓ VLM HTTP 错误展示包含状态码、原始 code 和 message")
+            passed += 1
+
             # 测试 19: serializeAnnotation 不含 judgments，image 段含 paper_id + page_index
             print("\n[测试 19] serializeAnnotation 字段（v2+ paper schema）...")
             v2_obj = await page.evaluate("""

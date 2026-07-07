@@ -2088,6 +2088,51 @@
             return out;
         }
 
+        function compactErrorText(text, maxLen = 300) {
+            const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+            if (!normalized) return '';
+            return normalized.length > maxLen ? normalized.slice(0, maxLen) + '...' : normalized;
+        }
+
+        function extractVlmErrorDetail(rawMessage) {
+            const raw = compactErrorText(rawMessage, 500);
+            if (!raw) return '';
+            try {
+                const data = JSON.parse(rawMessage);
+                const err = data && (data.error || data);
+                if (err && typeof err === 'object') {
+                    const parts = [
+                        err.code,
+                        err.type,
+                        err.param ? `param=${err.param}` : '',
+                        err.message
+                    ].filter(Boolean);
+                    if (parts.length) return compactErrorText(parts.join(' | '));
+                }
+            } catch (_) {}
+            return compactErrorText(raw);
+        }
+
+        function formatVlmError(result) {
+            if (!result || result.ok) return '';
+            if (result.reason === 'http') {
+                const status = result.status ? ` ${result.status}` : '';
+                const detail = extractVlmErrorDetail(result.message);
+                return detail ? `VLM HTTP${status}: ${detail}` : `VLM HTTP${status}`;
+            }
+            if (result.reason === 'network') {
+                const detail = extractVlmErrorDetail(result.message);
+                return detail ? `网络错误: ${detail}` : '网络错误';
+            }
+            if (result.reason === 'bad_json') {
+                const detail = extractVlmErrorDetail(result.message);
+                return detail ? `VLM 返回非 JSON: ${detail}` : 'VLM 返回非 JSON';
+            }
+            if (result.reason === 'no_config') return '未配置 VLM';
+            if (result.reason === 'empty_paper') return '空试卷';
+            return extractVlmErrorDetail(result.message) || '识别失败';
+        }
+
         async function callVLMPaper(paper, signal) {
             const { baseUrl, modelId, apiKey } = loadVlmSettings();
             if (!modelId || !apiKey) {
@@ -2225,20 +2270,25 @@
             if (paper.vlmInFlight) {
                 status.className = 'question-bar-status loading';
                 status.innerHTML = '<span class="question-bar-mini-spinner"></span>识别中...';
+                status.title = '';
             } else if (!hasVlmConfig()) {
                 status.className = 'question-bar-status error';
                 status.textContent = '未配置 VLM，点⚙设置';
+                status.title = '';
             } else if (paper.error) {
                 status.className = 'question-bar-status error';
                 status.textContent = paper.error + '（点↻重试）';
+                status.title = paper.error;
             } else if (questionList.length === 0) {
                 status.className = 'question-bar-status';
                 status.textContent = '未识别到题号';
+                status.title = '';
             } else {
                 const correct = Object.values(judgments).filter(s => s === 'correct').length;
                 const wrong = Object.values(judgments).filter(s => s === 'wrong').length;
                 status.className = 'question-bar-status';
                 status.textContent = `共 ${questionList.length} 题 · 对 ${correct} · 错 ${wrong}`;
+                status.title = '';
             }
             refresh.disabled = paper.vlmInFlight || !hasVlmConfig();
 
@@ -2335,11 +2385,7 @@
                 if (!result.ok) {
                     paper.vlmInFlight = false;
                     paper.questionList = [];
-                    let msg = '识别失败';
-                    if (result.reason === 'http') msg = `VLM HTTP ${result.status}`;
-                    else if (result.reason === 'network') msg = '网络错误';
-                    else if (result.reason === 'bad_json') msg = 'VLM 返回非 JSON';
-                    paper.error = msg;
+                    paper.error = formatVlmError(result) || '识别失败';
                     renderQuestionBar();
                     console.warn('VLM 调用失败', result);
                     return;
