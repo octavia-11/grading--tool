@@ -688,6 +688,7 @@ async def run_tests():
                     papers[pid].questionList = [];
                     papers[pid].error = null;
                     clearPaperCache(pid);
+                    clearGlobalQuestions();
                 }
             """)
             await page.evaluate("() => loadImage(1)")
@@ -813,6 +814,104 @@ async def run_tests():
             }""")
             assert call_count == 1, f"多图卷应只调用 1 次 VLM，实际 identifiedAt 设置次数: {call_count}"
             print("  ✓ 多图卷：同卷两图共享 questionList + judgments，VLM 只调 1 次")
+            passed += 1
+
+            # 测试 18c: 全局题号模板——不同学生（不同 paperId）共享，第二个学生不再调 VLM
+            print("\n[测试 18c] 全局题号模板：跨学生复用，N 学生只调 1 次 VLM...")
+            # 18a 已经把 PAPER_ID_A 调过一次 VLM，全局模板已写入
+            global_state = await page.evaluate("""() => {
+                const g = readGlobalQuestions();
+                return g ? { n: g.questions.length, src: g.sourcePaperId } : null;
+            }""")
+            assert global_state is not None, \
+                "18a 后全局题号模板应已写入 localStorage"
+            assert global_state["n"] == 4, f"全局模板应有 4 个题号，实际: {global_state}"
+            assert global_state["src"] == "multi-paper-uuid-aaaa-bbbb-cccc-dddddddddd", \
+                f"全局模板 sourcePaperId 应为 18a 的 paperId，实际: {global_state}"
+
+            # 构造第二个学生（不同 paperId），切换过去
+            call_counter = {"n": 0}
+            await page.evaluate("""
+                async () => {
+                    const makeImg = async (text, bg, name) => {
+                        const c = document.createElement('canvas');
+                        c.width = 800; c.height = 600;
+                        const cx = c.getContext('2d');
+                        cx.fillStyle = bg; cx.fillRect(0, 0, 800, 600);
+                        cx.fillStyle = '#333'; cx.font = '20px sans-serif';
+                        cx.fillText(text, 300, 300);
+                        const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.9));
+                        return new File([blob], name, { type: 'image/jpeg' });
+                    };
+                    const img = await makeImg('Student B', '#fff8e8', 'b1.jpg');
+                    const url = URL.createObjectURL(img);
+                    const PID_B = 'student-b-paper-uuid-zzzz';
+                    // 计数 callVLMPaper 调用次数
+                    const origCallVLM = callVLMPaper;
+                    window.__callVLMCount = 0;
+                    callVLMPaper = async function(paper, signal) {
+                        window.__callVLMCount++;
+                        return origCallVLM.apply(this, arguments);
+                    };
+                    taskItems.push({
+                        id: `${PID_B}__img_0`, taskId: PID_B, paperId: PID_B, paperImageIndex: 0,
+                        folderPath: '未匹配/studentB', imageName: 'b1.jpg',
+                        imageUrl: url, imageFile: img,
+                        metadata: { task_ids: [PID_B] }
+                    });
+                    papers[PID_B] = {
+                        paperId: PID_B,
+                        imageIds: [`${PID_B}__img_0`],
+                        questionList: [], judgments: {}, vlmInFlight: false, error: null,
+                        identifiedAt: null, vlmModelId: null
+                    };
+                }
+            """)
+            # 切到学生 B（最后一项），等题号栏渲染
+            await page.evaluate("() => loadImage(taskItems.length - 1)")
+            await page.wait_for_function("() => document.querySelectorAll('.qbtn').length === 4", timeout=3000)
+            # callVLMPaper 不应被调用（命中全局模板）
+            count_b = await page.evaluate("() => window.__callVLMCount")
+            assert count_b == 0, f"学生 B 应命中全局模板不调 VLM，实际调用次数: {count_b}"
+            # 学生 B 的 questionList 应等于全局模板
+            b_questions = await page.evaluate("""
+                () => papers['student-b-paper-uuid-zzzz'].questionList.map(q => q.question_no)
+            """)
+            assert b_questions == ['1', '1(1)', '1(2)', '2'], \
+                f"学生 B 应继承全局模板的题号列表，实际: {b_questions}"
+            # 学生 B 的 judgments 独立（应是空，默认 correct）
+            b_judgments = await page.evaluate("() => Object.keys(papers['student-b-paper-uuid-zzzz'].judgments).length")
+            assert b_judgments == 0, f"学生 B judgments 应独立为空，实际: {b_judgments}"
+            print("  ✓ 全局题号模板：学生 B 命中模板不调 VLM，judgments 独立")
+            passed += 1
+
+            # 测试 18d: ↻ 强制重识别应清掉所有 paper 缓存 + 全局模板
+            print("\n[测试 18d] ↻ 强制重识别清空全局模板 + 所有 paper 缓存...")
+            # 在学生 B 上点 ↻
+            await page.evaluate("""
+                () => {
+                    callVLMPaper = async (paper, signal) => ({
+                        ok: true,
+                        items: [{question_no:'NEW-1'}, {question_no:'NEW-2'}],
+                        modelId: 'doubao-test'
+                    });
+                }
+            """)
+            await page.evaluate("() => document.getElementById('qbRefresh').click()")
+            await page.wait_for_function(
+                "() => document.querySelectorAll('.qbtn').length === 2",
+                timeout=3000
+            )
+            # 全局模板应已更新为新题号
+            new_global = await page.evaluate("() => readGlobalQuestions()?.questions?.length")
+            assert new_global == 2, f"重识别后全局模板应为 2 题，实际: {new_global}"
+            # 学生 A 的 paper 缓存应被清掉（questionList 重置）
+            a_questions = await page.evaluate("""
+                () => papers['multi-paper-uuid-aaaa-bbbb-cccc-dddddddddd'].questionList.length
+            """)
+            assert a_questions == 0, \
+                f"重识别后学生 A 的 paper 缓存应被清空，questionList.length 实际: {a_questions}"
+            print("  ✓ ↻ 重识别：全局模板更新 + 所有 paper 缓存清空")
             passed += 1
 
             # 测试 20: parseQuestionList 防御式解析

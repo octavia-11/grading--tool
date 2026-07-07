@@ -2232,6 +2232,39 @@
             try { localStorage.removeItem(paperCacheKey(paperId)); } catch (_) {}
         }
 
+        // ============ 全局题号模板（同一份卷子跨学生共享） ============
+        // 所有学生做的是同一份卷子时，VLM 只对一份样本识别即可，题号列表跨学生复用。
+        // judgments 仍按 paperId 独立存储，每个学生有自己的对错记录。
+        const GLOBAL_QUESTIONS_KEY = 'vlmGlobalQuestions:v1';
+        function readGlobalQuestions() {
+            try {
+                const raw = localStorage.getItem(GLOBAL_QUESTIONS_KEY);
+                if (!raw) return null;
+                const v = JSON.parse(raw);
+                if (v && Array.isArray(v.questions)) {
+                    return {
+                        questions: v.questions,
+                        identifiedAt: v.identifiedAt || null,
+                        modelId: v.modelId || null,
+                        sourcePaperId: v.sourcePaperId || null
+                    };
+                }
+            } catch (_) {}
+            return null;
+        }
+        function writeGlobalQuestions(questions, identifiedAt, modelId, sourcePaperId) {
+            try {
+                localStorage.setItem(GLOBAL_QUESTIONS_KEY, JSON.stringify({
+                    questions, identifiedAt, modelId, sourcePaperId
+                }));
+            } catch (e) {
+                console.warn('全局题号模板写入失败', e);
+            }
+        }
+        function clearGlobalQuestions() {
+            try { localStorage.removeItem(GLOBAL_QUESTIONS_KEY); } catch (_) {}
+        }
+
         // ============ judgments 持久化（per-paper，localStorage） ============
         function paperJudgmentsKey(paperId) {
             return 'vlmJudgments:' + paperId;
@@ -2366,7 +2399,7 @@
                 return;
             }
 
-            // 缓存优先
+            // 缓存优先：per-paper
             if (!force) {
                 const cached = readPaperCache(paperId);
                 if (cached && Array.isArray(cached.items)) {
@@ -2376,6 +2409,21 @@
                     paper.vlmInFlight = false;
                     paper.error = null;
                     // 缓存的题号列表可能与现存 judgments 不完全重合：清掉已不在新题号列表里的判题
+                    pruneJudgmentsAgainstQuestions(paper);
+                    renderQuestionBar();
+                    return;
+                }
+            }
+
+            // 缓存优先：全局题号模板（同一份卷子跨学生共享，避免 N 个学生调 N 次 VLM）
+            if (!force) {
+                const global = readGlobalQuestions();
+                if (global && Array.isArray(global.questions) && global.questions.length > 0) {
+                    paper.questionList = global.questions;
+                    paper.identifiedAt = global.identifiedAt;
+                    paper.vlmModelId = global.modelId;
+                    paper.vlmInFlight = false;
+                    paper.error = null;
                     pruneJudgmentsAgainstQuestions(paper);
                     renderQuestionBar();
                     return;
@@ -2406,6 +2454,8 @@
                 paper.identifiedAt = new Date().toISOString();
                 paper.vlmModelId = result.modelId;
                 writePaperCache(paperId, paper.questionList, paper.identifiedAt, paper.vlmModelId);
+                // 同步写全局题号模板：同一份卷子的其他学生切换过来直接命中
+                writeGlobalQuestions(paper.questionList, paper.identifiedAt, paper.vlmModelId, paperId);
                 pruneJudgmentsAgainstQuestions(paper);
                 persistPaperJudgments(paperId);
                 paper.vlmInFlight = false;
@@ -2443,8 +2493,15 @@
             // 防止双击 ↻ 造成两个并发请求互相 abort
             const paper = papers[item.paperId];
             if (paper && paper.vlmInFlight) return;
-            // 强制刷新：清缓存再调
-            clearPaperCache(item.paperId);
+            // 强制刷新：清掉所有 paper 缓存 + 全局题号模板
+            // （题号是卷级共享资源，重识别意味着模板变化，所有 paper 的旧缓存都失效）
+            for (const pid in papers) {
+                clearPaperCache(pid);
+                papers[pid].questionList = [];
+                papers[pid].identifiedAt = null;
+                papers[pid].vlmModelId = null;
+            }
+            clearGlobalQuestions();
             await loadQuestionsForPaper(item.paperId, { force: true });
         }
 
