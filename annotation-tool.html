@@ -1246,6 +1246,9 @@
         async function parseFolder(files) {
             taskItems = [];
             papers = {};
+            // 清全局题号模板：上传新文件夹意味着切换任务批次，旧模板对新批次无效
+            // （全局模板本意是"同一批次内跨学生共享"，跨批次复用会导致新卷子显示上一次的题号）
+            clearGlobalQuestions();
             const dirMap = {};
             for (const file of files) {
                 const parts = file.webkitRelativePath.split('/');
