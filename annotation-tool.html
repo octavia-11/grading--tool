@@ -1016,7 +1016,8 @@
             <span class="progress-info" id="progressInfo">请选择批阅任务文件夹</span>
             <span class="stats-badge" id="statsBadge" style="display:none;">已标注: 0</span>
             <button class="folder-select-btn" onclick="selectFolder()">📁 选择文件夹</button>
-            <button class="export-btn" id="exportBtn" onclick="exportResults()" disabled>📦 导出结果</button>
+            <button class="export-btn" id="exportBtn" onclick="exportResults()" disabled>📦 导出 ZIP</button>
+            <button class="export-btn" id="exportExcelBtn" onclick="exportExcel()" disabled style="background:rgba(255,255,255,0.15);margin-left:0">📊 导出 Excel</button>
             <button class="settings-btn" id="vlmSettingsBtn" onclick="openVlmSettings()" title="VLM 设置">⚙</button>
         </div>
     </div>
@@ -1469,6 +1470,7 @@
             document.getElementById('thumbnailBar').style.display = 'flex';
             document.getElementById('sidebarToggle').classList.add('visible');
             document.getElementById('exportBtn').disabled = false;
+            document.getElementById('exportExcelBtn').disabled = false;
             document.getElementById('statsBadge').style.display = 'inline';
             renderTaxonomySelector();
         }
@@ -2818,6 +2820,138 @@
                 console.error(err);
                 hideLoading();
                 showToast('导出失败: ' + err.message);
+            }
+        }
+
+        // ============ 导出 Excel ============
+        async function exportExcel() {
+            if (taskItems.length === 0) {
+                showToast('没有可导出的数据');
+                return;
+            }
+            persistCurrent();
+            const currentItem = taskItems[currentIndex];
+            if (currentItem) {
+                const stored = loadLocalStorageForItem(currentItem.id);
+                if (stored) annotations[currentItem.id] = stored;
+            }
+
+            showLoading('正在生成 Excel...');
+            try {
+                const now = new Date();
+                const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+                // ---- Collect data per paper ----
+                const paperStats = {}; // pid -> { images, annotated, errors, errorTypes: {} }
+                for (const item of taskItems) {
+                    const pid = item.paperId || item.taskId;
+                    if (!paperStats[pid]) {
+                        paperStats[pid] = { paperId: pid, images: 0, annotated: 0, noBadcase: 0, errorCount: 0, errorTypes: {} };
+                    }
+                    const ps = paperStats[pid];
+                    ps.images++;
+                    const ann = annotations[item.id] || {};
+                    const errors = ann.errors || [];
+                    if (errors.length > 0) {
+                        ps.annotated++;
+                        ps.errorCount += errors.length;
+                        errors.forEach(e => {
+                            const et = e.error_type || '未分类';
+                            ps.errorTypes[et] = (ps.errorTypes[et] || 0) + 1;
+                        });
+                    } else {
+                        ps.noBadcase++;
+                    }
+                }
+
+                const paperList = Object.values(paperStats);
+                if (paperList.length === 0) {
+                    hideLoading();
+                    showToast('没有可导出的数据');
+                    return;
+                }
+
+                // Collect all error type keys
+                const allErrorTypes = new Set();
+                paperList.forEach(p => Object.keys(p.errorTypes).forEach(k => allErrorTypes.add(k)));
+                const errorTypeKeys = Array.from(allErrorTypes).sort();
+
+                // ---- Build HTML tables as .xls ----
+                const rows1 = [];
+                rows1.push(['试卷', '图片数', '有错误', '无错误', '总错误数', '标注率']);
+                paperList.forEach(p => {
+                    rows1.push([
+                        p.paperId,
+                        p.images,
+                        p.annotated,
+                        p.noBadcase,
+                        p.errorCount,
+                        p.images > 0 ? Math.round(p.annotated / p.images * 100) + '%' : '0%'
+                    ]);
+                });
+
+                const rows2 = [];
+                const header2 = ['试卷', ...errorTypeKeys, '总错误数'];
+                rows2.push(header2);
+                paperList.forEach(p => {
+                    const row = [p.paperId];
+                    errorTypeKeys.forEach(et => row.push(p.errorTypes[et] || 0));
+                    row.push(p.errorCount);
+                    rows2.push(row);
+                });
+
+                // Image detail table
+                const rows3 = [];
+                rows3.push(['试卷', '页码', '图片名', '状态', '错误数', '错误类型']);
+                for (const item of taskItems) {
+                    const ann = annotations[item.id] || {};
+                    const errors = ann.errors || [];
+                    const status = errors.length > 0 ? '有错误' : '无错误';
+                    const errorTypes = errors.map(e => e.error_type || '未分类').join('、');
+                    rows3.push([
+                        item.paperId || item.taskId,
+                        (item.paperImageIndex ?? 0) + 1,
+                        item.imageName,
+                        status,
+                        errors.length,
+                        errorTypes || '-'
+                    ]);
+                }
+
+                const buildTable = (rows) => {
+                    let html = '<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse">';
+                    rows.forEach((row, ri) => {
+                        html += '<tr>';
+                        row.forEach(cell => {
+                            const tag = ri === 0 ? 'th' : 'td';
+                            const style = ri === 0 ? 'background:#f0f0f0;font-weight:bold;text-align:center' : 'text-align:center';
+                            html += `<${tag} style="${style}">${cell}</${tag}>`;
+                        });
+                        html += '</tr>';
+                    });
+                    html += '</table>';
+                    return html;
+                };
+
+                const xlsContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
+<x:ExcelWorksheet><x:Name>批阅汇总</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+<x:ExcelWorksheet><x:Name>错误类型统计</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+<x:ExcelWorksheet><x:Name>图片明细</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>
+<h2>批阅汇总</h2>${buildTable(rows1)}<br><br>
+<h2>错误类型统计</h2>${buildTable(rows2)}<br><br>
+<h2>图片明细</h2>${buildTable(rows3)}
+</body></html>`;
+
+                const blob = new Blob([xlsContent], { type: 'application/vnd.ms-excel;charset=utf-8' });
+                saveAs(blob, `批阅标注统计_${dateStr}.xls`);
+                hideLoading();
+                showToast(`✓ 已导出 Excel：${paperList.length} 卷 · ${taskItems.length} 张图`);
+            } catch (err) {
+                console.error(err);
+                hideLoading();
+                showToast('Excel 导出失败: ' + err.message);
             }
         }
 
