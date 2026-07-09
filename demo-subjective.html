@@ -19,7 +19,7 @@
   .header-brand { flex-shrink: 0; }
   .header-nav { min-width: 320px; }
   .header-actions { justify-content: flex-end; overflow-x: auto; scrollbar-width: thin; }
-  header h1 { font-size: 16px; font-weight: 600; margin: 0 10px 0 0; white-space: nowrap; line-height: 1.2; }
+  header h1 { font-size: 16px; font-weight: 600; margin: 0 6px 0 0; white-space: nowrap; line-height: 1.2; }
   header select, header button, header input { font-size: 14px; border: 1px solid #d2d2d6; border-radius: 6px; background: #fff; }
   header select, header button { height: 34px; padding: 0 10px; cursor: pointer; }
   header button { flex: 0 0 auto; }
@@ -28,7 +28,7 @@
   #question-select { flex: 0 0 150px; }
   #image-tabs { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
   #image-tabs button { width: 34px; padding: 0; text-align: center; }
-  #grouping-input { width: 190px; height: 34px; padding: 0 10px; font-size: 12px; }
+  #grouping-input { width: 142px; height: 34px; padding: 0 8px; font-size: 12px; }
   header button.active { background: #0071e3; color: #fff; border-color: #0071e3; }
   .stats { font-size: 13px; color: #6e6e73; white-space: nowrap; }
   .export-actions { display: inline-flex; gap: 6px; flex: 0 0 auto; }
@@ -94,20 +94,20 @@
 
   /* 缩放工具栏(在 header) */
   .zoom-toolbar {
-    display: inline-flex; gap: 4px; padding: 3px;
+    display: inline-flex; gap: 3px; padding: 2px;
     background: #fff; border: 1px solid #d2d2d7; border-radius: 6px;
     user-select: none;
     flex: 0 0 auto;
   }
   .zoom-toolbar button {
-    width: 32px; height: 32px; padding: 0;
+    width: 28px; height: 28px; padding: 0;
     border: 1px solid #e5e5e7; background: #fff; border-radius: 4px;
     font-size: 14px; font-weight: 500; cursor: pointer; color: #1d1d1f;
   }
   .zoom-toolbar button:hover { background: #f0f0f2; }
   .zoom-toolbar button.active { background: #0071e3; color: #fff; border-color: #0071e3; }
   .zoom-toolbar .zoom-display {
-    min-width: 56px; padding: 0 8px; height: 32px; line-height: 32px;
+    min-width: 38px; padding: 0 4px; height: 28px; line-height: 28px;
     font-size: 12px; color: #6e6e73; text-align: center;
   }
 
@@ -354,7 +354,7 @@
 
 <header>
   <div class="header-brand">
-    <h1>主观题批改工具</h1>
+    <h1>批改工具</h1>
     <button id="import-btn" title="导入留痕与详情文件夹">📁 导入</button>
   </div>
   <div class="header-nav">
