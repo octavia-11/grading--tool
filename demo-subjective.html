@@ -7,15 +7,44 @@
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, "PingFang SC", sans-serif; background: #f5f5f7; color: #1d1d1f; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
   header {
-    height: 56px; background: #fff; border-bottom: 1px solid #d2d2d7;
-    display: flex; align-items: center; gap: 16px; padding: 0 20px;
+    min-height: 60px; background: #fff; border-bottom: 1px solid #d2d2d7;
+    display: grid; grid-template-columns: auto minmax(320px, 1fr) auto;
+    align-items: center; gap: 10px 14px; padding: 8px 16px;
     position: sticky; top: 0; z-index: 10;
     flex-shrink: 0;
   }
-  header h1 { font-size: 16px; font-weight: 600; margin: 0 24px 0 0; }
-  header select, header button { font-size: 14px; padding: 6px 12px; border: 1px solid #d2d2d6; border-radius: 6px; background: #fff; cursor: pointer; }
+  .header-brand, .header-nav, .header-actions {
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+  }
+  .header-brand { flex-shrink: 0; }
+  .header-nav { min-width: 320px; }
+  .header-actions { justify-content: flex-end; overflow-x: auto; scrollbar-width: thin; }
+  header h1 { font-size: 16px; font-weight: 600; margin: 0 10px 0 0; white-space: nowrap; line-height: 1.2; }
+  header select, header button, header input { font-size: 14px; border: 1px solid #d2d2d6; border-radius: 6px; background: #fff; }
+  header select, header button { height: 34px; padding: 0 10px; cursor: pointer; }
+  header button { flex: 0 0 auto; }
+  header select { min-width: 0; }
+  #paper-select { flex: 1 1 260px; max-width: 520px; }
+  #question-select { flex: 0 0 150px; }
+  #image-tabs { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+  #image-tabs button { width: 34px; padding: 0; text-align: center; }
+  #grouping-input { width: 190px; height: 34px; padding: 0 10px; font-size: 12px; }
   header button.active { background: #0071e3; color: #fff; border-color: #0071e3; }
-  .stats { font-size: 13px; color: #6e6e73; }
+  .stats { font-size: 13px; color: #6e6e73; white-space: nowrap; }
+  .export-actions { display: inline-flex; gap: 6px; flex: 0 0 auto; }
+
+  @media (max-width: 1280px) {
+    header { grid-template-columns: auto 1fr; }
+    .header-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+  @media (max-width: 760px) {
+    header { grid-template-columns: 1fr; }
+    .header-brand, .header-nav, .header-actions { width: 100%; }
+    .header-brand { justify-content: space-between; }
+    .header-nav { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+    #paper-select { flex: 0 0 260px; max-width: none; }
+    #question-select { flex: 0 0 150px; }
+  }
 
   .shortcut-panel {
     flex-shrink: 0;
@@ -68,7 +97,7 @@
     display: inline-flex; gap: 4px; padding: 3px;
     background: #fff; border: 1px solid #d2d2d7; border-radius: 6px;
     user-select: none;
-    margin-left: auto;  /* 推到右侧 */
+    flex: 0 0 auto;
   }
   .zoom-toolbar button {
     width: 32px; height: 32px; padding: 0;
@@ -324,23 +353,31 @@
 <body>
 
 <header>
-  <h1>主观题批改工具</h1>
-  <button id="import-btn" title="导入留痕与详情文件夹">📁 导入</button>
-  <select id="paper-select"></select>
-  <select id="question-select" title="跳转题号"></select>
-  <span id="image-tabs"></span>
-  <div class="zoom-toolbar">
-    <button id="zoom-out" title="缩小">−</button>
-    <span class="zoom-display" id="zoom-display">fit</span>
-    <button id="zoom-in" title="放大">+</button>
-    <button id="zoom-fit" title="适应">⤢</button>
-    <button id="zoom-100" title="100%">1:1</button>
+  <div class="header-brand">
+    <h1>主观题批改工具</h1>
+    <button id="import-btn" title="导入留痕与详情文件夹">📁 导入</button>
   </div>
-  <span class="stats" id="stats"></span>
-  <button id="shortcut-btn" title="显示/隐藏快捷键说明">⌨ 快捷键</button>
-  <button id="export-btn" title="导出全部批改结果(JSON)">📦 导出 JSON</button>
-  <button id="export-excel-btn" title="导出 Excel 统计表">📊 导出 Excel</button>
-  <input id="grouping-input" placeholder="大题分组,如:1-8,9-11" style="font-size:12px;width:140px;padding:4px 8px;border:1px solid #d2d2d6;border-radius:6px" title="设置大题的题号范围，用逗号分隔">
+  <div class="header-nav">
+    <select id="paper-select"></select>
+    <select id="question-select" title="跳转题号"></select>
+    <span id="image-tabs"></span>
+  </div>
+  <div class="header-actions">
+    <span class="stats" id="stats"></span>
+    <div class="zoom-toolbar">
+      <button id="zoom-out" title="缩小">−</button>
+      <span class="zoom-display" id="zoom-display">fit</span>
+      <button id="zoom-in" title="放大">+</button>
+      <button id="zoom-fit" title="适应">⤢</button>
+      <button id="zoom-100" title="100%">1:1</button>
+    </div>
+    <button id="shortcut-btn" title="显示/隐藏快捷键说明">⌨ 快捷键</button>
+    <div class="export-actions">
+      <button id="export-btn" title="导出全部批改结果(JSON)">📦 导出 JSON</button>
+      <button id="export-excel-btn" title="导出 Excel 统计表">📊 导出 Excel</button>
+    </div>
+    <input id="grouping-input" placeholder="大题分组,如:1-8,9-11" title="设置大题的题号范围，用逗号分隔">
+  </div>
 </header>
 
 <div class="shortcut-panel" id="shortcut-panel">
