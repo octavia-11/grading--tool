@@ -54,17 +54,36 @@
 
 key 格式:`<question_id>-<subIdx>`(subIdx 为 `whole` 表示整题级,数字表示第 N 个空)。
 
-### 本地运行
+### 使用方式
 
-需要起本地 http server(浏览器不允许 `file://` 用 fetch):
+**无需起 http server,直接打开网页就能用**:
 
-```bash
-cd 留痕与详情/..  # 数据目录的父目录
-python3 -m http.server 8000
-# 浏览器打开 http://localhost:8000/grading-image-annotation-tool/demo-subjective.html
+1. 打开 https://shiren23.github.io/grading-image-annotation-tool/demo-subjective.html
+2. 点击右上角 **📁 导入**
+3. 选择"留痕与详情"目录(整个文件夹,浏览器会读取所有子目录的 task json + 图片)
+4. 工具自动解析,默认显示第一份卷子
+
+也支持本地直接双击 `demo-subjective.html` 打开(浏览器允许 file:// 读 webkitdirectory 选中的文件)。
+
+如果导入的是本地数据,所有图片用 blob URL 在内存中加载,**不会上传到任何服务器**。
+
+### 数据组织要求
+
+导入的文件夹结构示例:
+```
+留痕与详情/
+├── 参考卷/                  # 可选,工具会自动识别作"参考卷对照"
+│   ├── 1.jpeg ~ 4.jpeg
+│   └── task_<uuid>.json
+└── 未匹配/                  # 学生卷子
+    ├── 1/
+    │   ├── 1.jpg, 2.jpg
+    │   └── task_<uuid>.json
+    ├── 2/ ...
+    └── N/ ...
 ```
 
-数据目录默认相对路径 `../初中生物_留痕与详情`,如需改其他科目,改 demo-subjective.html 顶部的 `BASE` 常量和 `PAPERS` 数组。
+每个含 `task_*.json` + 图片的子目录会被识别为一份卷子。
 
 ## v2 数据模型（error-centric）
 

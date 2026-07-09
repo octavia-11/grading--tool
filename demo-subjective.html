@@ -300,7 +300,8 @@
 <body>
 
 <header>
-  <h1>主观题标注 Demo · 折中1</h1>
+  <h1>主观题批改工具</h1>
+  <button id="import-btn" title="导入留痕与详情文件夹">📁 导入</button>
   <select id="paper-select"></select>
   <select id="question-select" title="跳转题号"></select>
   <span id="image-tabs"></span>
@@ -341,19 +342,16 @@
 </main>
 
 <script>
-const BASE = '../初中生物_留痕与详情';
-const REFERENCE_TASK = '参考卷/task_7df7a93c-7703-4a57-847b-2d42e108f2f6.json';
-let referencePaper = null;  // 缓存参考卷
+// 数据源由用户导入(文件夹选择),不再硬编码路径
+// state.papers 由 importFolder 填充,每项:{ folder, task_id, taskData, imageFiles: [File...] }
+// state.referencePaper 由 importFolder 检测参考卷目录填充
+
+function findReferencePaper() {
+  return state.papers.find(p => p.folder.includes('参考卷')) || null;
+}
 
 async function loadReferencePaper() {
-  if (referencePaper) return referencePaper;
-  try {
-    const r = await fetch(`${BASE}/${REFERENCE_TASK}`);
-    referencePaper = await r.json();
-    return referencePaper;
-  } catch (e) {
-    return null;
-  }
+  return findReferencePaper()?.taskData || null;
 }
 
 function showModal(title, bodyHtml) {
@@ -391,24 +389,8 @@ async function showReferenceCompare(qid) {
   `).join('<hr style="margin:16px 0">');
   showModal(`参考卷 · 第 ${qid} 题 (共 ${matches.length} 处)`, html);
 }
-const PAPERS = [
-  { folder: '未匹配/1',  task: 'task_8277514d-69f4-4ab5-814e-d39493a214d2.json' },
-  { folder: '未匹配/2',  task: 'task_c0adfced-936c-4deb-8397-d6f38d6b594a.json' },
-  { folder: '未匹配/3',  task: 'task_e85139c3-87be-4906-af6e-c6a196f691fd.json' },
-  { folder: '未匹配/4',  task: 'task_c3c509bb-7538-4181-a38e-7b0914bb4143.json' },
-  { folder: '未匹配/5',  task: 'task_88ac4599-ba1d-4d18-91fb-d4fd5b57cedc.json' },
-  { folder: '未匹配/6',  task: 'task_c13b6e74-b9bc-4d12-9a82-505414afb28a.json' },
-  { folder: '未匹配/7',  task: 'task_b9cc2a89-0d61-4f8f-b1e1-12de9ec188f2.json' },
-  { folder: '未匹配/8',  task: 'task_fa3b500f-6973-46ca-a53d-5aae4711d2c0.json' },
-  { folder: '未匹配/9',  task: 'task_c3f15a0c-7869-4273-bea0-5febacd58f92.json' },
-  { folder: '未匹配/10', task: 'task_47360363-354c-457e-ac1f-87cc4f496fb2.json' },
-  { folder: '未匹配/11', task: 'task_6fca7b8e-9bbc-4bf3-bb07-3a8ae757be6c.json' },
-  { folder: '未匹配/12', task: 'task_525c9327-ad30-4ade-b0ce-36fbdfe07a04.json' },
-  { folder: '未匹配/13', task: 'task_bead568b-034d-462a-b0fe-5a35fa32d123.json' },
-  { folder: '未匹配/14', task: 'task_ccba2c04-5b2c-4b4c-a421-bb8940215731.json' },
-  { folder: '未匹配/15', task: 'task_4d0b165e-f726-49df-aebb-876bb2109ba0.json' },
-  { folder: '未匹配/16', task: 'task_4499ff8c-80fb-4262-a917-9f9acf67819e.json' },
-];
+// PAPERS 由用户导入后填充(见 importFolder),初始为空
+const PAPERS = [];
 
 const state = {
   paper: null,
@@ -593,19 +575,104 @@ function init() {
   document.getElementById('show-region').addEventListener('change', e => { state.showRegion = e.target.checked; redrawOverlay(); });
   document.getElementById('show-area').addEventListener('change', e => { state.showArea = e.target.checked; redrawOverlay(); });
 
-  const sel = document.getElementById('paper-select');
-  PAPERS.forEach((p, i) => {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = p.folder;
-    sel.appendChild(opt);
+  document.getElementById('paper-select').addEventListener('change', e => {
+    if (e.target.value) loadPaper(parseInt(e.target.value));
   });
-  sel.addEventListener('change', e => loadPaper(parseInt(e.target.value)));
+  document.getElementById('import-btn').addEventListener('click', importFolder);
+  document.getElementById('export-btn').addEventListener('click', exportAll);
+
   setupZoomPan();
   setupKeyboard();
   setupResizers();
-  document.getElementById('export-btn').addEventListener('click', exportAll);
-  loadPaper(0);
+  showEmptyState('请点击右上「📁 导入」选择"留痕与详情"目录');
+}
+
+function showEmptyState(msg) {
+  document.getElementById('bar-pane').innerHTML = `<div class="detail-empty">${escape(msg)}</div>`;
+  document.getElementById('detail-pane').innerHTML = `<div class="detail-empty">${escape(msg)}</div>`;
+  document.getElementById('image-tabs').innerHTML = '';
+  document.getElementById('stats').textContent = '';
+}
+
+// ============ 文件夹导入 ============
+async function importFolder() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.webkitdirectory = true;
+  input.multiple = true;
+  input.addEventListener('change', async e => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    showEmptyState('解析中…');
+
+    // 按目录分组(webkitRelativePath 形如 "未匹配/1/task_xxx.json")
+    const dirMap = {};
+    for (const f of files) {
+      const path = f.webkitRelativePath || f.name;
+      const parts = path.split('/');
+      parts.pop();
+      const dir = parts.join('/');
+      if (!dir) continue;
+      if (!dirMap[dir]) dirMap[dir] = [];
+      dirMap[dir].push(f);
+    }
+
+    // 找包含 task_*.json 的目录,组 paper
+    const newPapers = [];
+    for (const dir of Object.keys(dirMap).sort((a, b) => a.localeCompare(b, 'zh', { numeric: true }))) {
+      const fs = dirMap[dir];
+      const taskFile = fs.find(f => /^task_.*\.json$/i.test(f.name));
+      if (!taskFile) continue;
+      const imageFiles = fs
+        .filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh', { numeric: true }));
+      if (imageFiles.length === 0) continue;
+      try {
+        const text = await taskFile.text();
+        const taskData = JSON.parse(text);
+        newPapers.push({
+          folder: dir,
+          task_id: taskData.task_id,
+          taskFile: taskFile.name,
+          taskData,
+          imageFiles,
+        });
+      } catch (err) {
+        console.warn('解析失败', dir, err);
+      }
+    }
+
+    if (newPapers.length === 0) {
+      showEmptyState('未在所选目录找到有效数据(每个子目录需 task_*.json + 图片)');
+      alert('未找到有效数据\n\n请确认选择的是"留痕与详情"目录,\n里面应有 参考卷/ 和 未匹配/ 等子目录,\n每个子目录含 task_*.json 和图片。');
+      return;
+    }
+
+    // 合并到 PAPERS(避免重复导入覆盖;按 folder 去重)
+    for (const np of newPapers) {
+      const existingIdx = PAPERS.findIndex(p => p.folder === np.folder);
+      if (existingIdx >= 0) PAPERS[existingIdx] = np;
+      else PAPERS.push(np);
+    }
+    // 重新排序
+    PAPERS.sort((a, b) => a.folder.localeCompare(b.folder, 'zh', { numeric: true }));
+
+    renderPaperSelect();
+    loadPaper(0);
+  });
+  input.click();
+}
+
+function renderPaperSelect() {
+  const sel = document.getElementById('paper-select');
+  sel.innerHTML = '';
+  PAPERS.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    const isRef = p.folder.includes('参考卷');
+    opt.textContent = `${isRef ? '📚 ' : ''}${p.folder} (${p.task_id.slice(0, 8)}…)`;
+    sel.appendChild(opt);
+  });
 }
 
 // 把当前卷子的批改结果累积到 allPapersResults(供导出 + 切回时恢复)
@@ -657,38 +724,31 @@ async function loadPaper(idx) {
   // 切换前提交当前卷子的批改结果到累积存储(如果有标记)
   commitCurrentPaper();
   state.selection = null;
-  state.userMarks = {};        // 清空:跨卷子 qid 相同会串数据
+  state.userMarks = {};
   state.errorReasons = {};
-  // 切到新卷子时,如果累积存储里有该卷子的历史,恢复
   const cached = state.allPapersResults[idx];
   if (cached) {
     state.userMarks = { ...cached.user_marks };
     state.errorReasons = JSON.parse(JSON.stringify(cached.error_reasons));
   }
   const p = PAPERS[idx];
-  try {
-    const r = await fetch(`${BASE}/${p.folder}/${p.task}`);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
-    state.paper = data;
-    state.paperIdx = idx;  // fetch 成功后才更新(失败时保持原值)
-    state.imageCount = (data.paper_url || []).length;
-    state.imageIdx = 0;
-    // 同步顶部下拉框
-    const sel = document.getElementById('paper-select');
-    if (sel) sel.value = String(idx);
-    renderImageTabs();
-    renderImage(0);
-    renderBar();
-    renderStats();
-    renderDetail(null);
-    renderQuestionNav();
-  } catch (e) {
+  if (!p || !p.taskData) {
     document.getElementById('bar-pane').innerHTML =
-      `<div style="padding:20px;color:#d70015">加载失败:${escape(e.message)}</div>`;
-    document.getElementById('detail-pane').innerHTML =
-      '<div class="detail-empty">加载失败</div>';
+      '<div class="detail-empty">未加载卷子数据</div>';
+    return;
   }
+  state.paper = p.taskData;
+  state.paperIdx = idx;
+  state.imageCount = p.imageFiles.length;
+  state.imageIdx = 0;
+  const sel = document.getElementById('paper-select');
+  if (sel) sel.value = String(idx);
+  renderImageTabs();
+  renderImage(0);
+  renderBar();
+  renderStats();
+  renderDetail(null);
+  renderQuestionNav();
 }
 
 function renderQuestionNav() {
@@ -724,9 +784,16 @@ function renderImage(idx) {
   const img = document.getElementById('paper-img');
   const miniImg = document.getElementById('minimap-img');
   const p = PAPERS[state.paperIdx];
-  img.src = `${BASE}/${p.folder}/${idx+1}.jpg`;
-  miniImg.src = img.src;
-  // 切图时重置滚动到顶部,保留 zoom 级别
+  if (!p || !p.imageFiles || !p.imageFiles[idx]) return;
+  // 释放上一次的 blob URL(避免内存泄漏)
+  if (state._lastImgUrl) {
+    URL.revokeObjectURL(state._lastImgUrl);
+    state._lastImgUrl = null;
+  }
+  const url = URL.createObjectURL(p.imageFiles[idx]);
+  state._lastImgUrl = url;
+  img.src = url;
+  miniImg.src = url;
   const pane = document.getElementById('canvas-pane');
   pane.scrollLeft = 0;
   pane.scrollTop = 0;
