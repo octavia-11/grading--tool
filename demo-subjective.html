@@ -26,8 +26,13 @@
   header select { min-width: 0; }
   #paper-select { flex: 1 1 260px; max-width: 520px; }
   #question-select { flex: 0 0 150px; }
-  #image-tabs { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
-  #image-tabs button { width: 34px; padding: 0; text-align: center; }
+  #image-tabs { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+  #image-tabs button { width: 28px; padding: 0; text-align: center; }
+  #image-tabs button:disabled { opacity: .35; cursor: default; }
+  #image-tabs .image-page-select {
+    width: 72px; height: 34px; padding: 0 6px;
+    font-size: 12px; text-align: center;
+  }
   #grouping-input { width: 142px; height: 34px; padding: 0 8px; font-size: 12px; }
   header button.active { background: #0071e3; color: #fff; border-color: #0071e3; }
   .stats { font-size: 13px; color: #6e6e73; white-space: nowrap; }
@@ -1145,13 +1150,48 @@ function renderQuestionNav() {
 function renderImageTabs() {
   const tabs = document.getElementById('image-tabs');
   tabs.innerHTML = '';
+  if (!state.imageCount) return;
+
+  const prev = document.createElement('button');
+  prev.textContent = '‹';
+  prev.title = '上一张图';
+  prev.disabled = state.imageIdx <= 0;
+  prev.addEventListener('click', () => {
+    if (state.imageIdx <= 0) return;
+    state.imageIdx--;
+    renderImage(state.imageIdx);
+    renderImageTabs();
+  });
+  tabs.appendChild(prev);
+
+  const sel = document.createElement('select');
+  sel.className = 'image-page-select';
+  sel.title = '切换图片';
   for (let i = 0; i < state.imageCount; i++) {
-    const btn = document.createElement('button');
-    btn.textContent = `图${i+1}`;
-    if (i === state.imageIdx) btn.classList.add('active');
-    btn.addEventListener('click', () => { state.imageIdx = i; renderImage(i); renderImageTabs(); });
-    tabs.appendChild(btn);
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = `图${i + 1}/${state.imageCount}`;
+    sel.appendChild(opt);
   }
+  sel.value = String(state.imageIdx);
+  sel.addEventListener('change', e => {
+    state.imageIdx = parseInt(e.target.value, 10);
+    renderImage(state.imageIdx);
+    renderImageTabs();
+  });
+  tabs.appendChild(sel);
+
+  const next = document.createElement('button');
+  next.textContent = '›';
+  next.title = '下一张图';
+  next.disabled = state.imageIdx >= state.imageCount - 1;
+  next.addEventListener('click', () => {
+    if (state.imageIdx >= state.imageCount - 1) return;
+    state.imageIdx++;
+    renderImage(state.imageIdx);
+    renderImageTabs();
+  });
+  tabs.appendChild(next);
 }
 
 function renderImage(idx) {
