@@ -1,14 +1,70 @@
-# 图片批阅标注工具 + 结果查看工具
+# 图片批阅标注工具 + 结果查看工具 + 主观题批改工具
 
-本项目包含两个基于浏览器的本地静态网页工具，配合一个迁移脚本，构成完整的「标注 → 查看 → 分析」数据流：
+本项目包含三个基于浏览器的本地静态网页工具，配合一个迁移脚本，构成完整的「标注 → 查看 → 分析」数据流：
 
 1. **图片批阅标注工具** — 用矩形框（bbox）在图片上框选错误位置，每个框绑定一个错误类型和说明。导出结构化 JSON。
    **[https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html](https://shiren23.github.io/grading-image-annotation-tool/annotation-tool.html)**
 2. **标注结果查看工具** — 浏览标注结果，在原图上叠加 bbox，支持字段级编辑错误列表。
    **[https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html](https://shiren23.github.io/grading-image-annotation-tool/result-viewer.html)**
-3. **迁移脚本** `migrate_legacy_zip.py` — 把旧版（marked_*.jpg + error_info.txt）结果迁移到新 schema。
+3. **主观题批改工具**（新) — 基于 VLM 后端返回的 task json,在卷面答题线上点选/键盘切换标记错空,挂错误原因,导出结构化 JSON。适合"留痕与详情"格式的卷子(`task_<uuid>.json` + 图片 + metadata.yaml)。
+   **[https://shiren23.github.io/grading-image-annotation-tool/demo-subjective.html](https://shiren23.github.io/grading-image-annotation-tool/demo-subjective.html)**
+4. **迁移脚本** `migrate_legacy_zip.py` — 把旧版（marked_*.jpg + error_info.txt）结果迁移到新 schema。
 
 所有数据均在浏览器本地处理，不会上传到任何服务器。
+
+## 主观题批改工具(demo-subjective.html)
+
+### 适用场景
+
+输入:`留痕与详情` 格式的批阅文件夹,每份卷子一个子目录,包含:
+- `1.jpg`、`2.jpg` ... 卷面扫描图(可多张)
+- `metadata.yaml`(内容不影响工具)
+- `task_<uuid>.json` — VLM 后端返回的题目结构 + 判定结果
+
+### 核心特性
+
+- **三栏布局**:左 = 卷面图(可缩放/拖拽/小地图导航),中 = 题目详情 + 错误原因,右 = 题号 bar
+- **按题型差异化**:选择题/综合题整题级,解答题按题干空级,填空题按 parts
+- **两种标记方式**:点答题线、点 chip、键盘 `Enter` — 数据互通
+- **错误原因**:4 大类(切题/OCR/解题/判题)+ 15 子类,单选,带备注
+- **跨学生键盘流**:`↑` `↓` 切空(末尾自动切下一学生),`Enter` 切换错对,`←` `→` 切图,`0`/`1` 切缩放
+- **导出 JSON**:累积所有已批改卷子的结果,一键导出
+
+### 数据 schema(导出 JSON)
+
+```json
+{
+  "schema": "subjective-grading/1.0",
+  "exported_at": "2026-07-09T...",
+  "paper_count": 3,
+  "papers": [
+    {
+      "paper_idx": 0,
+      "folder": "未匹配/1",
+      "task_id": "8277514d-...",
+      "user_marks": { "5-0": "bad", "5-1": "bad", "1-whole": "bad" },
+      "error_reasons": {
+        "5-0": { "category": "judgment", "subtype": "wrong_conclusion", "comment": "..." }
+      },
+      "committed_at": "2026-07-09T..."
+    }
+  ]
+}
+```
+
+key 格式:`<question_id>-<subIdx>`(subIdx 为 `whole` 表示整题级,数字表示第 N 个空)。
+
+### 本地运行
+
+需要起本地 http server(浏览器不允许 `file://` 用 fetch):
+
+```bash
+cd 留痕与详情/..  # 数据目录的父目录
+python3 -m http.server 8000
+# 浏览器打开 http://localhost:8000/grading-image-annotation-tool/demo-subjective.html
+```
+
+数据目录默认相对路径 `../初中生物_留痕与详情`,如需改其他科目,改 demo-subjective.html 顶部的 `BASE` 常量和 `PAPERS` 数组。
 
 ## v2 数据模型（error-centric）
 

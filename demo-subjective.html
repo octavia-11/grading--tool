@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>主观题标注 Demo(折中1:按题型差异化)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang SC", sans-serif; background: #f5f5f7; color: #1d1d1f; }
+  header {
+    height: 56px; background: #fff; border-bottom: 1px solid #d2d2d7;
+    display: flex; align-items: center; gap: 16px; padding: 0 20px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 16px; font-weight: 600; margin: 0 24px 0 0; }
+  header select, header button { font-size: 14px; padding: 6px 12px; border: 1px solid #d2d2d6; border-radius: 6px; background: #fff; cursor: pointer; }
+  header button.active { background: #0071e3; color: #fff; border-color: #0071e3; }
+  .stats { font-size: 13px; color: #6e6e73; }
+
+  main {
+    display: grid;
+    grid-template-columns: var(--col-canvas, 1fr) 6px var(--col-detail, 380px) 6px var(--col-bar, 340px);
+    gap: 0; height: calc(100vh - 56px);
+  }
+  .resizer { background: #d2d2d7; cursor: col-resize; transition: background .1s; }
+  .resizer:hover, .resizer.active { background: #0071e3; }
+
+  .canvas-pane {
+    background: #ebebed; overflow: auto; padding: 24px;
+    display: flex; align-items: flex-start; justify-content: flex-start;
+    position: relative;
+    cursor: grab;
+  }
+  .canvas-pane.panning { cursor: grabbing; }
+  .canvas-pane.dragging-region { cursor: default; }
+  .canvas-wrap {
+    position: relative; background: #fff; box-shadow: 0 2px 16px rgba(0,0,0,.1);
+    line-height: 0; flex-shrink: 0;
+    margin: 0 auto;  /* 关键:wrap 宽 ≤ pane 时居中;> pane 时左对齐(不会从两侧裁掉) */
+  }
+  .canvas-wrap img { display: block; width: 100%; height: 100%; }
+
+  /* 缩放工具栏(在 header) */
+  .zoom-toolbar {
+    display: inline-flex; gap: 4px; padding: 3px;
+    background: #fff; border: 1px solid #d2d2d7; border-radius: 6px;
+    user-select: none;
+    margin-left: auto;  /* 推到右侧 */
+  }
+  .zoom-toolbar button {
+    width: 32px; height: 32px; padding: 0;
+    border: 1px solid #e5e5e7; background: #fff; border-radius: 4px;
+    font-size: 14px; font-weight: 500; cursor: pointer; color: #1d1d1f;
+  }
+  .zoom-toolbar button:hover { background: #f0f0f2; }
+  .zoom-toolbar button.active { background: #0071e3; color: #fff; border-color: #0071e3; }
+  .zoom-toolbar .zoom-display {
+    min-width: 56px; padding: 0 8px; height: 32px; line-height: 32px;
+    font-size: 12px; color: #6e6e73; text-align: center;
+  }
+
+  /* 小地图 */
+  .minimap {
+    position: absolute; top: 16px; right: 16px;
+    width: 140px; height: 180px;
+    background: rgba(255,255,255,.95); border: 1px solid #d2d2d7; border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1); z-index: 5;
+    overflow: hidden; cursor: pointer;
+  }
+  .minimap img { width: 100%; height: 100%; object-fit: contain; opacity: .7; }
+  .minimap-viewport {
+    position: absolute; left: 0; top: 0;
+    border: 2px solid #ff2d55; background: rgba(255,45,85,.1);
+    pointer-events: none;
+  }
+  .box { position: absolute; pointer-events: none; }
+  .box-bbox { border: 2px dashed #af52de; }
+  .box-region { border: 1.5px solid #0071e3; background: rgba(0,113,227,0.12); }
+  .box-area { border: 1.5px solid #ff9500; background: rgba(255,149,0,0.12); }
+  .box-active.box-bbox { border-color: #ff2d55; border-width: 3px; }
+  .box-active.box-region { background: rgba(0,113,227,0.55); border-color: #003d80; }
+  .box-active.box-area { background: rgba(255,149,0,0.55); border-color: #aa5500; }
+  .box-dim.box-region { background: rgba(0,113,227,0.04); border-color: rgba(0,113,227,0.3); }
+  .box-dim.box-area { background: rgba(255,149,0,0.04); border-color: rgba(255,149,0,0.3); }
+
+  .bar-pane { background: #fff; border-left: 1px solid #d2d2d7; overflow-y: auto; padding: 16px; }
+
+  /* ============ 中间详情栏 ============ */
+  .detail-pane {
+    background: #fff; border-left: 1px solid #d2d2d7; border-right: 1px solid #d2d2d7;
+    overflow-y: auto; padding: 16px; font-size: 13px;
+  }
+  .detail-empty { color: #8e8e93; font-style: italic; text-align: center; margin-top: 40px; }
+  .detail-section { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #f0f0f2; }
+  .detail-section:last-child { border-bottom: none; }
+  .detail-section > h3 {
+    font-size: 11px; font-weight: 600; color: #8e8e93;
+    text-transform: uppercase; letter-spacing: .5px;
+    margin: 0 0 8px 0;
+  }
+
+  /* task-id */
+  .taskid-row {
+    display: flex; align-items: center; gap: 8px;
+    font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px;
+    background: #f5f5f7; padding: 6px 8px; border-radius: 6px;
+  }
+  .taskid-row .id-text { flex: 1; color: #1d1d1f; word-break: break-all; line-height: 1.4; }
+  .copy-btn {
+    flex-shrink: 0; padding: 4px 10px; font-size: 11px; font-weight: 500;
+    border: 1px solid #d2d2d7; background: #fff; color: #1d1d1f;
+    border-radius: 4px; cursor: pointer;
+  }
+  .copy-btn:hover { background: #f0f0f2; }
+  .copy-btn.copied { background: #34c759; color: #fff; border-color: #34c759; }
+
+  /* 元信息 */
+  .meta-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+  .meta-grid .k { color: #8e8e93; }
+  .meta-grid .v { color: #1d1d1f; }
+  .meta-grid .v.bad { color: #d70015; }
+  .meta-grid .v.ok { color: #1d8a3f; }
+  .meta-grid .v.user-bad { color: #d70015; font-weight: 600; }
+
+  /* 折叠块 */
+  .fold {
+    background: #fafafa; border-radius: 6px; padding: 8px 10px;
+    font-size: 13px; line-height: 1.5; color: #1d1d1f;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .fold.collapsed {
+    cursor: pointer;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .fold.collapsed::after {
+    content: ' 展开 ▼'; color: #0071e3; font-size: 11px;
+  }
+  .fold-toggle {
+    margin-top: 4px; font-size: 11px; color: #0071e3; cursor: pointer;
+  }
+
+  /* 错误原因 */
+  .reason-grid-4 {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;
+  }
+  .reason-grid-2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  }
+  .reason-btn {
+    padding: 8px 4px; border: 1.5px solid #e5e5e7; background: #fff;
+    border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500;
+    color: #1d1d1f; text-align: center; transition: all .1s;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .reason-btn:hover { transform: translateY(-1px); }
+  .reason-btn .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .reason-btn.active { color: #fff; border-color: transparent; }
+  .reason-btn .placeholder { color: #8e8e93; font-size: 11px; font-weight: 400; }
+
+  .reason-comment {
+    margin-top: 8px;
+    width: 100%; box-sizing: border-box;
+    border: 1px solid #e5e5e7; border-radius: 6px;
+    padding: 6px 8px; font-size: 12px; font-family: inherit;
+    resize: none; overflow: hidden; line-height: 1.4;
+    background: #fafafa;
+  }
+  .reason-comment:focus { outline: none; border-color: #0071e3; background: #fff; }
+  .reason-clear {
+    margin-top: 6px; font-size: 11px; color: #8e8e93; cursor: pointer;
+    background: none; border: none; padding: 0;
+  }
+  .reason-clear:hover { color: #d70015; }
+  .reason-empty { color: #8e8e93; font-style: italic; font-size: 12px; padding: 4px 0; }
+
+  /* 参考卷对照按钮 */
+  .compare-btn {
+    width: 100%; padding: 6px 10px; margin-top: 6px;
+    border: 1px dashed #0071e3; background: rgba(0,113,227,0.05); color: #0071e3;
+    border-radius: 6px; cursor: pointer; font-size: 12px;
+  }
+  .compare-btn:hover { background: rgba(0,113,227,0.1); }
+
+  /* 模态 */
+  .modal-mask {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 24px;
+  }
+  .modal {
+    background: #fff; border-radius: 10px; max-width: 720px; width: 100%;
+    max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,.2);
+  }
+  .modal-header {
+    padding: 14px 20px; border-bottom: 1px solid #e5e5e7;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-header h3 { margin: 0; font-size: 16px; }
+  .modal-close {
+    background: none; border: none; cursor: pointer; font-size: 20px;
+    color: #8e8e93; padding: 0 8px;
+  }
+  .modal-body { padding: 16px 20px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+  .modal-warn { background: #fff3cd; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 12px; color: #856404; }
+  .modal-body .label-k { color: #8e8e93; font-size: 11px; margin-top: 10px; }
+  .modal-body .label-v { color: #1d1d1f; }
+  .modal-body .label-v.mono { font-family: ui-monospace, monospace; }
+  .group { margin-bottom: 20px; }
+  .group-header {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; font-weight: 600; color: #6e6e73;
+    text-transform: uppercase; letter-spacing: .5px;
+    padding-bottom: 6px; border-bottom: 1px solid #f0f0f2; margin-bottom: 10px;
+  }
+  .group-header .count { font-weight: 400; color: #8e8e93; }
+  .group-header .summary { font-weight: 500; }
+  .summary .ok { color: #34c759; }
+  .summary .bad { color: #ff3b30; }
+  .summary .na { color: #8e8e93; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    min-width: 44px; height: 44px; padding: 0 10px;
+    border-radius: 8px; border: 2px solid transparent;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 13px; font-weight: 500; line-height: 1.2;
+    background: #f5f5f7; color: #1d1d1f;
+    transition: transform .1s;
+  }
+  .chip:hover { transform: translateY(-1px); }
+  .chip .sub { font-size: 10px; font-weight: 400; color: #6e6e73; }
+  .chip.ok { background: #e8f8ed; color: #1d8a3f; }
+  .chip.bad { background: #ffeef0; color: #d70015; }
+  .chip.na { background: #f5f5f7; color: #8e8e93; }
+  .chip.user-bad {
+    background: #d70015; color: #fff;
+    border-color: #d70015;
+    box-shadow: 0 0 0 2px rgba(215,0,21,.25);
+  }
+  .chip.user-bad .sub { color: #ffeef0; }
+  .chip.active { border-color: #0071e3; box-shadow: 0 0 0 2px rgba(0,113,227,.2); }
+  .chip.qtype-tag { font-size: 10px; padding: 1px 5px; background: rgba(0,0,0,.06); border-radius: 3px; margin-top: 2px; }
+
+  .box.clickable { pointer-events: auto; cursor: pointer; transition: filter .1s; }
+  .box.clickable:hover { filter: brightness(.7) saturate(1.3); }
+  .box.user-marked.box-region { background: rgba(215,0,21,0.45) !important; border-color: #d70015 !important; }
+  .box.user-marked.box-area { background: rgba(215,0,21,0.45) !important; border-color: #d70015 !important; }
+
+  .mark-btn {
+    padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500;
+    cursor: pointer; border: 1px solid #d70015; background: #fff; color: #d70015;
+  }
+  .mark-btn:hover { background: #fff5f6; }
+  .mark-btn.marked { background: #d70015; color: #fff; }
+  .mark-btn.marked:hover { background: #b80012; }
+
+  .big-card {
+    margin-bottom: 8px; border: 1px solid #e5e5e7; border-radius: 10px; overflow: hidden;
+  }
+  .big-card-header {
+    padding: 10px 12px; background: #fafafa; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  }
+  .big-card-header:hover { background: #f0f0f2; }
+  .big-card-header .qid { font-weight: 600; font-size: 15px; }
+  .big-card-header .qtype { font-size: 11px; padding: 2px 6px; background: #e8e8ed; border-radius: 3px; color: #6e6e73; }
+  .big-card-header .indicator { margin-left: auto; font-size: 13px; }
+  .big-card-header .indicator.ok { color: #34c759; }
+  .big-card-header .indicator.bad { color: #ff3b30; }
+  .big-card-header .indicator.na { color: #8e8e93; }
+  .big-card-body { padding: 10px 12px; border-top: 1px solid #e5e5e7; }
+  .big-card-body .chips { gap: 4px; }
+
+  footer {
+    position: fixed; bottom: 0; left: 0; right: 420px;
+    background: #fff; border-top: 1px solid #d2d2d7; padding: 12px 20px;
+    font-size: 13px; max-height: 30vh; overflow-y: auto;
+  }
+  footer .row { display: flex; gap: 16px; margin-bottom: 4px; }
+  footer .label { color: #6e6e73; min-width: 80px; }
+  footer .value { flex: 1; }
+  footer .value.bad { color: #d70015; }
+  footer .preview { color: #6e6e73; font-style: italic; }
+
+  .legend {
+    position: absolute; top: 12px; right: 12px;
+    background: rgba(255,255,255,.95); border: 1px solid #d2d2d7; border-radius: 8px;
+    padding: 8px 12px; font-size: 12px; line-height: 1.8;
+  }
+  .legend label { display: flex; align-items: center; cursor: pointer; user-select: none; }
+  .legend input[type="checkbox"] { margin: 0 6px 0 0; }
+  .legend .swatch { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+  .legend .s-bbox { border: 2px dashed #af52de; }
+  .legend .s-region { background: rgba(0,113,227,0.4); border: 1.5px solid #0071e3; }
+  .legend .s-area { background: rgba(255,149,0,0.4); border: 1.5px solid #ff9500; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>主观题标注 Demo · 折中1</h1>
+  <select id="paper-select"></select>
+  <select id="question-select" title="跳转题号"></select>
+  <span id="image-tabs"></span>
+  <div class="zoom-toolbar">
+    <button id="zoom-out" title="缩小">−</button>
+    <span class="zoom-display" id="zoom-display">fit</span>
+    <button id="zoom-in" title="放大">+</button>
+    <button id="zoom-fit" title="适应">⤢</button>
+    <button id="zoom-100" title="100%">1:1</button>
+  </div>
+  <span class="stats" id="stats"></span>
+  <button id="export-btn" title="导出全部批改结果(JSON)">📦 导出</button>
+</header>
+
+<main>
+  <div class="canvas-pane" id="canvas-pane">
+    <div class="canvas-wrap" id="canvas-wrap">
+      <img id="paper-img" crossorigin="anonymous">
+      <div class="legend">
+        <label><input type="checkbox" id="show-bbox"><span class="swatch s-bbox"></span>题目外框</label>
+        <label><input type="checkbox" id="show-region" checked><span class="swatch s-region"></span>答题线</label>
+        <label><input type="checkbox" id="show-area"><span class="swatch s-area"></span>笔迹框</label>
+      </div>
+    </div>
+    <div class="minimap" id="minimap" style="display:none">
+      <img id="minimap-img">
+      <div class="minimap-viewport" id="minimap-viewport"></div>
+    </div>
+  </div>
+
+  <div class="resizer" data-target="canvas"></div>
+  <section class="detail-pane" id="detail-pane">
+    <div class="detail-empty">点击右侧题号查看详情</div>
+  </section>
+  <div class="resizer" data-target="detail"></div>
+
+  <aside class="bar-pane" id="bar-pane"></aside>
+</main>
+
+<script>
+const BASE = '../初中生物_留痕与详情';
+const REFERENCE_TASK = '参考卷/task_7df7a93c-7703-4a57-847b-2d42e108f2f6.json';
+let referencePaper = null;  // 缓存参考卷
+
+async function loadReferencePaper() {
+  if (referencePaper) return referencePaper;
+  try {
+    const r = await fetch(`${BASE}/${REFERENCE_TASK}`);
+    referencePaper = await r.json();
+    return referencePaper;
+  } catch (e) {
+    return null;
+  }
+}
+
+function showModal(title, bodyHtml) {
+  let mask = document.querySelector('.modal-mask');
+  if (mask) mask.remove();
+  mask = document.createElement('div');
+  mask.className = 'modal-mask';
+  mask.innerHTML = `
+    <div class="modal">
+      <div class="modal-header"><h3>${title}</h3><button class="modal-close">×</button></div>
+      <div class="modal-body">${bodyHtml}</div>
+    </div>`;
+  mask.addEventListener('click', e => { if (e.target === mask || e.target.classList.contains('modal-close')) mask.remove(); });
+  document.body.appendChild(mask);
+}
+
+async function showReferenceCompare(qid) {
+  showModal('对照参考卷', '<div style="color:#8e8e93">加载中…</div>');
+  const ref = await loadReferencePaper();
+  if (!ref) { showModal('错误', '<div>无法加载参考卷</div>'); return; }
+  // 找同 qid 的题(可能多份参考卷 qid 重复,取第一个)
+  const matches = ref.result.filter(q => String(q.question_id) === String(qid));
+  if (matches.length === 0) {
+    showModal('参考卷 · 第 ' + qid + ' 题', '<div class="modal-warn">⚠ 参考卷是"题库合集",和学生卷题目未必对应。当前参考卷中无此题号。</div>');
+    return;
+  }
+  const html = matches.map((q, i) => `
+    <div class="modal-warn">⚠ 参考卷是"题库合集",此题可能与学生卷不是同一道,仅作参考。</div>
+    <div><span class="label-k">题型</span> <span class="label-v">${q.question_type}</span></div>
+    <div><span class="label-k">题干</span></div>
+    <div class="label-v" style="white-space:pre-wrap;background:#f5f5f7;padding:10px;border-radius:6px">${escape(q.question || '(空)')}</div>
+    <div><span class="label-k">参考答案</span></div>
+    <div class="label-v mono" style="background:#f5f5f7;padding:10px;border-radius:6px">${escape(q.final_right_answer || '(无)')}</div>
+    ${q.knowledge_points && q.knowledge_points.length ? `<div><span class="label-k">知识点</span> <span class="label-v">${q.knowledge_points.map(k => k.raw).join('; ')}</span></div>` : ''}
+  `).join('<hr style="margin:16px 0">');
+  showModal(`参考卷 · 第 ${qid} 题 (共 ${matches.length} 处)`, html);
+}
+const PAPERS = [
+  { folder: '未匹配/1',  task: 'task_8277514d-69f4-4ab5-814e-d39493a214d2.json' },
+  { folder: '未匹配/2',  task: 'task_c0adfced-936c-4deb-8397-d6f38d6b594a.json' },
+  { folder: '未匹配/3',  task: 'task_e85139c3-87be-4906-af6e-c6a196f691fd.json' },
+  { folder: '未匹配/4',  task: 'task_c3c509bb-7538-4181-a38e-7b0914bb4143.json' },
+  { folder: '未匹配/5',  task: 'task_88ac4599-ba1d-4d18-91fb-d4fd5b57cedc.json' },
+  { folder: '未匹配/6',  task: 'task_c13b6e74-b9bc-4d12-9a82-505414afb28a.json' },
+  { folder: '未匹配/7',  task: 'task_b9cc2a89-0d61-4f8f-b1e1-12de9ec188f2.json' },
+  { folder: '未匹配/8',  task: 'task_fa3b500f-6973-46ca-a53d-5aae4711d2c0.json' },
+  { folder: '未匹配/9',  task: 'task_c3f15a0c-7869-4273-bea0-5febacd58f92.json' },
+  { folder: '未匹配/10', task: 'task_47360363-354c-457e-ac1f-87cc4f496fb2.json' },
+  { folder: '未匹配/11', task: 'task_6fca7b8e-9bbc-4bf3-bb07-3a8ae757be6c.json' },
+  { folder: '未匹配/12', task: 'task_525c9327-ad30-4ade-b0ce-36fbdfe07a04.json' },
+  { folder: '未匹配/13', task: 'task_bead568b-034d-462a-b0fe-5a35fa32d123.json' },
+  { folder: '未匹配/14', task: 'task_ccba2c04-5b2c-4b4c-a421-bb8940215731.json' },
+  { folder: '未匹配/15', task: 'task_4d0b165e-f726-49df-aebb-876bb2109ba0.json' },
+  { folder: '未匹配/16', task: 'task_4499ff8c-80fb-4262-a917-9f9acf67819e.json' },
+];
+
+const state = {
+  paper: null,
+  paperIdx: 0,
+  imageIdx: 0,
+  imageCount: 0,
+  natW: 0, natH: 0,
+  zoom: 0,            // 0 = 适应宽度;正数 = 实际缩放倍率(1=100%)
+  isPanning: false,   // 是否在拖拽中
+  selection: null, // { qid, subIdx, question }
+  showBbox: false,
+  showRegion: true,
+  showArea: false,
+  userMarks: {}, // { 'qid-subIdx': 'bad' }  subIdx 为 null 时用 'null'
+  errorReasons: {}, // { 'qid-subIdx': { category, subtype, comment } }
+  allPapersResults: {}, // { paperIdx: { folder, task_id, user_marks, error_reasons } } 累积导出用
+};
+
+// 错误原因分类(沿用上一版 annotation-tool.html)
+const REASON_CATEGORIES = [
+  { id: 'topic', label: '切题', color: '#e74c3c', subtypes: [
+    { id: 'off_topic',     label: '未切出此题' },
+    { id: 'incomplete',    label: '切题不完整' },
+    { id: 'uncut_legend',  label: '未切出图例' },
+  ]},
+  { id: 'ocr', label: 'OCR', color: '#3498db', subtypes: [
+    { id: 'char_wrong',  label: '单字识别错' },
+    { id: 'char_missing',label: '漏字' },
+    { id: 'formula',     label: '公式错' },
+    { id: 'format',      label: '格式/标点' },
+  ]},
+  { id: 'solution', label: '解题', color: '#f39c12', subtypes: [
+    { id: 'logic',      label: '逻辑错' },
+    { id: 'calc',       label: '计算错' },
+    { id: 'formula',    label: '公式错' },
+    { id: 'incomplete', label: '步骤缺失' },
+  ]},
+  { id: 'judgment', label: '判题', color: '#9b59b6', subtypes: [
+    { id: 'wrong_conclusion', label: '对错结论错' },
+    { id: 'score_wrong',      label: '分数错' },
+    { id: 'overlook',         label: '漏判' },
+    { id: 'label_wrong',      label: '标签错误' },
+  ]},
+];
+
+function getErrorReason(qid, subIdx) {
+  return state.errorReasons[markKey(qid, subIdx)] || null;
+}
+function setErrorReason(qid, subIdx, reason) {
+  state.errorReasons[markKey(qid, subIdx)] = reason;
+}
+function clearErrorReason(qid, subIdx) {
+  delete state.errorReasons[markKey(qid, subIdx)];
+}
+
+function copyTaskId() {
+  const taskId = state.paper.task_id;
+  navigator.clipboard.writeText(taskId).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    if (btn) {
+      btn.classList.add('copied');
+      btn.textContent = '已复制';
+      setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '复制'; }, 1500);
+    }
+  });
+}
+
+function markKey(qid, subIdx) {
+  return `${qid}-${subIdx === null ? 'whole' : subIdx}`;
+}
+function getUserMark(qid, subIdx) {
+  return state.userMarks[markKey(qid, subIdx)] || null;
+}
+function toggleUserMark(qid, subIdx) {
+  const k = markKey(qid, subIdx);
+  if (state.userMarks[k]) delete state.userMarks[k];
+  else state.userMarks[k] = 'bad';
+}
+
+function backendStatus(q, subIdx) {
+  if (subIdx === null) return q.is_right;
+  const t = q.question_type;
+  const parts = q.is_right_parts || [];
+  if (parts.length === 0) return q.is_right;
+  if (t === '解答题') {
+    const blanks = parseBlanksBySubquestion(q);
+    if (subIdx < blanks.length) {
+      const b = blanks[subIdx];
+      return parts[Math.min(b.subQ - 1, parts.length - 1)];
+    }
+    // 超出 blanks(延伸段):用最后一个 blank 的子题
+    const last = blanks[blanks.length - 1];
+    return last ? parts[Math.min(last.subQ - 1, parts.length - 1)] : q.is_right;
+  }
+  return parts[Math.min(subIdx, parts.length - 1)];
+}
+
+// 统一构造 chip 列表:chip 数 = max(blanks, regions)
+// 每个 chip 1:1 对应一个 region(如有),标签基于 blanks
+function getChipsData(q, type) {
+  const regions = sortedRegions(q);
+  const parts = q.is_right_parts || [];
+  let blanks = null;
+  if (type === '解答题') blanks = parseBlanksBySubquestion(q);
+
+  const N = blanks
+    ? Math.max(blanks.length, regions.length)
+    : Math.max(parts.length, regions.length);
+
+  const chips = [];
+  for (let i = 0; i < N; i++) {
+    let label, backend, subQ = null;
+    if (blanks) {
+      if (i < blanks.length) {
+        const b = blanks[i];
+        subQ = b.subQ;
+        label = `(${b.subQ}).${b.blankInSubQ}`;
+      } else {
+        const last = blanks[blanks.length - 1];
+        subQ = last ? last.subQ : 1;
+        label = `(${subQ})+`;
+      }
+      backend = parts[Math.min(subQ - 1, parts.length - 1)];
+    } else {
+      if (i < parts.length) {
+        label = `${i + 1}`;
+        backend = parts[i];
+      } else {
+        label = `${parts.length}+`;
+        backend = parts[parts.length - 1];
+      }
+    }
+    chips.push({ idx: i, label, backend });
+  }
+  return chips;
+}
+
+// 解析题干,把空位按所属子题分组
+// 空位格式兼容:LaTeX \underline{\quad...}、ASCII ____、全角 ＿＿＿＿
+// 返回 [{ globalIdx, subQ, blankInSubQ }],subQ=0 表示无子题(整题)
+function parseBlanksBySubquestion(q) {
+  const text = q.question || '';
+  const blankMatches = [...text.matchAll(/\\underline\{[^}]*\}|_{2,}|＿{2,}/g)];
+  if (blankMatches.length === 0) return [];
+  // 子题标记:(1) (2) ... 排除 [1] 这种方括号
+  const subQMatches = [...text.matchAll(/\((\d+)\)/g)];
+
+  const result = [];
+  for (let i = 0; i < blankMatches.length; i++) {
+    const pos = blankMatches[i].index;
+    let subQ = 0;
+    for (let j = subQMatches.length - 1; j >= 0; j--) {
+      if (subQMatches[j].index <= pos) {
+        subQ = parseInt(subQMatches[j][1]);
+        break;
+      }
+    }
+    result.push({ globalIdx: i, subQ, blankInSubQ: 0 });
+  }
+  // 计算 blankInSubQ
+  const counter = {};
+  for (const r of result) {
+    counter[r.subQ] = (counter[r.subQ] || 0) + 1;
+    r.blankInSubQ = counter[r.subQ];
+  }
+  return result;
+}
+
+// 综合状态:用户标记优先,否则后端判定
+function combinedStatus(q, subIdx) {
+  const u = getUserMark(q.question_id, subIdx);
+  if (u === 'bad') return 'user-bad';
+  const b = backendStatus(q, subIdx);
+  if (b === true) return 'ok';
+  if (b === false) return 'bad';
+  return 'na';
+}
+
+// ============ 初始化 ============
+function init() {
+  document.getElementById('show-bbox').addEventListener('change', e => { state.showBbox = e.target.checked; redrawOverlay(); });
+  document.getElementById('show-region').addEventListener('change', e => { state.showRegion = e.target.checked; redrawOverlay(); });
+  document.getElementById('show-area').addEventListener('change', e => { state.showArea = e.target.checked; redrawOverlay(); });
+
+  const sel = document.getElementById('paper-select');
+  PAPERS.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = p.folder;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', e => loadPaper(parseInt(e.target.value)));
+  setupZoomPan();
+  setupKeyboard();
+  setupResizers();
+  document.getElementById('export-btn').addEventListener('click', exportAll);
+  loadPaper(0);
+}
+
+// 把当前卷子的批改结果累积到 allPapersResults(供导出 + 切回时恢复)
+function commitCurrentPaper() {
+  if (!state.paper) return;
+  const hasMarks = Object.keys(state.userMarks).length > 0;
+  const hasReasons = Object.keys(state.errorReasons).length > 0;
+  if (!hasMarks && !hasReasons) {
+    delete state.allPapersResults[state.paperIdx];  // 空结果不存
+    return;
+  }
+  state.allPapersResults[state.paperIdx] = {
+    folder: PAPERS[state.paperIdx].folder,
+    task_id: state.paper.task_id,
+    user_marks: { ...state.userMarks },
+    error_reasons: JSON.parse(JSON.stringify(state.errorReasons)),
+    committed_at: new Date().toISOString(),
+  };
+}
+
+function exportAll() {
+  commitCurrentPaper();
+  const entries = Object.entries(state.allPapersResults);
+  if (entries.length === 0) {
+    alert('暂无可导出的批改结果\n请先在卷子上标记错误');
+    return;
+  }
+  const out = {
+    schema: 'subjective-grading/1.0',
+    exported_at: new Date().toISOString(),
+    paper_count: entries.length,
+    papers: entries.map(([idx, r]) => ({
+      paper_idx: parseInt(idx),
+      ...r,
+    })),
+  };
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `主观题批改结果_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function loadPaper(idx) {
+  // 切换前提交当前卷子的批改结果到累积存储(如果有标记)
+  commitCurrentPaper();
+  state.selection = null;
+  state.userMarks = {};        // 清空:跨卷子 qid 相同会串数据
+  state.errorReasons = {};
+  // 切到新卷子时,如果累积存储里有该卷子的历史,恢复
+  const cached = state.allPapersResults[idx];
+  if (cached) {
+    state.userMarks = { ...cached.user_marks };
+    state.errorReasons = JSON.parse(JSON.stringify(cached.error_reasons));
+  }
+  const p = PAPERS[idx];
+  try {
+    const r = await fetch(`${BASE}/${p.folder}/${p.task}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    state.paper = data;
+    state.paperIdx = idx;  // fetch 成功后才更新(失败时保持原值)
+    state.imageCount = (data.paper_url || []).length;
+    state.imageIdx = 0;
+    // 同步顶部下拉框
+    const sel = document.getElementById('paper-select');
+    if (sel) sel.value = String(idx);
+    renderImageTabs();
+    renderImage(0);
+    renderBar();
+    renderStats();
+    renderDetail(null);
+    renderQuestionNav();
+  } catch (e) {
+    document.getElementById('bar-pane').innerHTML =
+      `<div style="padding:20px;color:#d70015">加载失败:${escape(e.message)}</div>`;
+    document.getElementById('detail-pane').innerHTML =
+      '<div class="detail-empty">加载失败</div>';
+  }
+}
+
+function renderQuestionNav() {
+  const sel = document.getElementById('question-select');
+  sel.innerHTML = '<option value="">跳转题号…</option>';
+  for (const q of state.paper.result) {
+    const opt = document.createElement('option');
+    opt.value = q.question_id;
+    opt.textContent = `第 ${q.question_id} 题 (${q.question_type})`;
+    sel.appendChild(opt);
+  }
+  sel.onchange = e => {
+    if (!e.target.value) return;
+    const q = state.paper.result.find(qq => String(qq.question_id) === String(e.target.value));
+    if (q) selectQuestion(q, null);
+    e.target.value = '';  // 重置,允许重复选同一题
+  };
+}
+
+function renderImageTabs() {
+  const tabs = document.getElementById('image-tabs');
+  tabs.innerHTML = '';
+  for (let i = 0; i < state.imageCount; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = `图${i+1}`;
+    if (i === state.imageIdx) btn.classList.add('active');
+    btn.addEventListener('click', () => { state.imageIdx = i; renderImage(i); renderImageTabs(); });
+    tabs.appendChild(btn);
+  }
+}
+
+function renderImage(idx) {
+  const img = document.getElementById('paper-img');
+  const miniImg = document.getElementById('minimap-img');
+  const p = PAPERS[state.paperIdx];
+  img.src = `${BASE}/${p.folder}/${idx+1}.jpg`;
+  miniImg.src = img.src;
+  // 切图时重置滚动到顶部,保留 zoom 级别
+  const pane = document.getElementById('canvas-pane');
+  pane.scrollLeft = 0;
+  pane.scrollTop = 0;
+  img.onload = () => {
+    state.natW = img.naturalWidth;
+    state.natH = img.naturalHeight;
+    applyZoom();
+    redrawOverlay();
+    setTimeout(scrollSelectionIntoView, 50);
+  };
+  redrawOverlay();
+}
+
+// ============ 缩放 / 平移 / 小地图 ============
+function calcFitZoom() {
+  const pane = document.getElementById('canvas-pane');
+  const w = pane.clientWidth - 48;  // 减去 padding
+  const h = pane.clientHeight - 48;
+  return Math.max(0.05, Math.min(w / state.natW, h / state.natH));
+}
+
+function currentZoom() {
+  return state.zoom === 0 ? calcFitZoom() : state.zoom;
+}
+
+function applyZoom() {
+  if (!state.natW) return;
+  const z = currentZoom();
+  const wrap = document.getElementById('canvas-wrap');
+  wrap.style.width = (state.natW * z) + 'px';
+  wrap.style.height = (state.natH * z) + 'px';
+  document.getElementById('zoom-display').textContent =
+    state.zoom === 0 ? 'fit' : Math.round(z * 100) + '%';
+  // 标记 active 按钮
+  document.getElementById('zoom-fit').classList.toggle('active', state.zoom === 0);
+  document.getElementById('zoom-100').classList.toggle('active', Math.abs(z - 1) < 0.01);
+  // 显示小地图(只在放大超過 fit 时显示)
+  const minimap = document.getElementById('minimap');
+  minimap.style.display = (z > calcFitZoom() * 1.05) ? 'block' : 'none';
+  updateMinimap();
+}
+
+function updateMinimap() {
+  const mm = document.getElementById('minimap');
+  if (mm.style.display === 'none') return;
+  const mmImg = document.getElementById('minimap-img');
+  const vp = document.getElementById('minimap-viewport');
+  const pane = document.getElementById('canvas-pane');
+  const wrap = document.getElementById('canvas-wrap');
+  if (!mmImg.naturalWidth || !wrap.offsetWidth) return;
+
+  // 小地图内 img 用 object-fit: contain,算实际显示尺寸 + 居中偏移
+  const cw = mm.clientWidth, ch = mm.clientHeight;
+  const scale = Math.min(cw / mmImg.naturalWidth, ch / mmImg.naturalHeight);
+  const dispW = mmImg.naturalWidth * scale;
+  const dispH = mmImg.naturalHeight * scale;
+  const offsetX = (cw - dispW) / 2;
+  const offsetY = (ch - dispH) / 2;
+
+  // pane 视口在 wrap 内的相对位置(0~1)
+  const x0 = pane.scrollLeft - wrap.offsetLeft;
+  const y0 = pane.scrollTop - wrap.offsetTop;
+  const xRatio = Math.max(0, Math.min(1, x0 / wrap.offsetWidth));
+  const yRatio = Math.max(0, Math.min(1, y0 / wrap.offsetHeight));
+  const wRatio = Math.min(1, pane.clientWidth / wrap.offsetWidth);
+  const hRatio = Math.min(1, pane.clientHeight / wrap.offsetHeight);
+
+  // 转换到 minimap 内的像素坐标(相对 img 显示区域)
+  vp.style.left = (offsetX + xRatio * dispW) + 'px';
+  vp.style.top = (offsetY + yRatio * dispH) + 'px';
+  vp.style.width = (wRatio * dispW) + 'px';
+  vp.style.height = (hRatio * dispH) + 'px';
+}
+
+// 滚轮缩放(以光标位置为中心)
+function setupZoomPan() {
+  const pane = document.getElementById('canvas-pane');
+
+  // 滚轮缩放
+  pane.addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey) return;  // 让浏览器原生缩放
+    e.preventDefault();
+    const oldZoom = currentZoom();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.1, Math.min(5, oldZoom * delta));
+    // 计算光标在图上的相对位置(0~1)
+    const rect = pane.getBoundingClientRect();
+    const cursorX = e.clientX - rect.left + pane.scrollLeft - pane.clientLeft;
+    const cursorY = e.clientY - rect.top + pane.scrollTop - pane.clientTop;
+    const wrap = document.getElementById('canvas-wrap');
+    const imgX = cursorX - wrap.offsetLeft;
+    const imgY = cursorY - wrap.offsetTop;
+    const ratioX = imgX / wrap.offsetWidth;
+    const ratioY = imgY / wrap.offsetHeight;
+    // 应用新缩放
+    state.zoom = Math.abs(newZoom - calcFitZoom()) < 0.02 ? 0 : newZoom;
+    applyZoom();
+    // 调整 scroll 让光标位置保持
+    const newWrap = document.getElementById('canvas-wrap');
+    const newImgX = ratioX * newWrap.offsetWidth;
+    const newImgY = ratioY * newWrap.offsetHeight;
+    pane.scrollLeft = newWrap.offsetLeft + newImgX - (e.clientX - rect.left);
+    pane.scrollTop = newWrap.offsetTop + newImgY - (e.clientY - rect.top);
+    redrawOverlay();
+  }, { passive: false });
+
+  // 双击放大见下方拖拽代码块(合并以避免与 mousedown 冲突)
+
+  // 拖拽平移
+  let panStart = null;
+  let panMoved = false;  // 移动距离阈值,避免和 click 冲突
+  pane.addEventListener('mousedown', e => {
+    // 不在 box / 控件上才拖拽
+    if (e.target.closest('.box') || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if (e.button !== 0) return;
+    panStart = {
+      x: e.clientX, y: e.clientY,
+      scrollLeft: pane.scrollLeft, scrollTop: pane.scrollTop,
+    };
+    panMoved = false;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!panStart) return;
+    const dx = e.clientX - panStart.x;
+    const dy = e.clientY - panStart.y;
+    if (!panMoved && Math.hypot(dx, dy) < 5) return;  // 移动阈值
+    if (!panMoved) {
+      panMoved = true;
+      pane.classList.add('panning');
+    }
+    pane.scrollLeft = panStart.scrollLeft - dx;
+    pane.scrollTop = panStart.scrollTop - dy;
+    updateMinimap();
+  });
+  document.addEventListener('mouseup', () => {
+    if (panStart) {
+      panStart = null;
+      panMoved = false;
+      pane.classList.remove('panning');
+    }
+  });
+
+  // 双击前清空 panStart,避免双击的 mousedown 触发拖拽
+  pane.addEventListener('dblclick', e => {
+    if (panStart) { panStart = null; panMoved = false; pane.classList.remove('panning'); }
+    if (e.target.closest('.box') || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
+    state.zoom = state.zoom === 0 ? 1 : 0;
+    applyZoom();
+    redrawOverlay();
+  });
+
+  // 滚动时更新小地图
+  pane.addEventListener('scroll', updateMinimap);
+
+  // 缩放按钮
+  document.getElementById('zoom-in').addEventListener('click', () => {
+    state.zoom = Math.min(5, currentZoom() * 1.2);
+    if (Math.abs(state.zoom - calcFitZoom()) < 0.02) state.zoom = 0;
+    applyZoom();
+    redrawOverlay();
+  });
+  document.getElementById('zoom-out').addEventListener('click', () => {
+    state.zoom = Math.max(0.1, currentZoom() * 0.83);
+    if (Math.abs(state.zoom - calcFitZoom()) < 0.02) state.zoom = 0;
+    applyZoom();
+    redrawOverlay();
+  });
+  document.getElementById('zoom-fit').addEventListener('click', () => {
+    state.zoom = 0;
+    applyZoom();
+    redrawOverlay();
+  });
+  document.getElementById('zoom-100').addEventListener('click', () => {
+    state.zoom = 1;
+    applyZoom();
+    redrawOverlay();
+  });
+
+  // 小地图点击跳转
+  document.getElementById('minimap').addEventListener('click', e => {
+    if (state.zoom === 0) return;  // fit 模式无需跳转
+    const mm = document.getElementById('minimap');
+    const rect = mm.getBoundingClientRect();
+    const xRatio = (e.clientX - rect.left) / rect.width;
+    const yRatio = (e.clientY - rect.top) / rect.height;
+    const pane = document.getElementById('canvas-pane');
+    const wrap = document.getElementById('canvas-wrap');
+    // 把 (xRatio, yRatio) 这个点居中到视口
+    pane.scrollLeft = wrap.offsetLeft + xRatio * wrap.offsetWidth - pane.clientWidth / 2;
+    pane.scrollTop = wrap.offsetTop + yRatio * wrap.offsetHeight - pane.clientHeight / 2;
+    updateMinimap();
+  });
+
+  // 窗口大小变化时重新计算
+  window.addEventListener('resize', () => {
+    if (state.zoom === 0) applyZoom();
+    updateMinimap();
+  });
+}
+
+// 可调分割条
+function setupResizers() {
+  document.querySelectorAll('.resizer').forEach(r => {
+    r.addEventListener('mousedown', e => {
+      e.preventDefault();
+      r.classList.add('active');
+      const target = r.dataset.target;
+      const startX = e.clientX;
+      const main = document.querySelector('main');
+      const cs = getComputedStyle(main);
+      // grid-template-columns 形如 "1fr 6px 380px 6px 340px"
+      const cols = cs.gridTemplateColumns.trim().split(/\s+/).map(parseFloat);
+      const startVals = { canvas: cols[0] || 0, detail: cols[2] || 380, bar: cols[4] || 340 };
+      // 0 或 NaN 表示 1fr(自适应),给个估算值
+      if (!startVals.canvas) {
+        startVals.canvas = document.querySelector('.canvas-pane').offsetWidth;
+      }
+      // 全屏光标 + 禁止文本选择
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      const onMove = ev => {
+        const dx = ev.clientX - startX;
+        if (target === 'canvas') {
+          const newCanvas = Math.max(400, startVals.canvas + dx);
+          const newDetail = Math.max(280, startVals.detail - dx);
+          main.style.setProperty('--col-canvas', newCanvas + 'px');
+          main.style.setProperty('--col-detail', newDetail + 'px');
+        } else if (target === 'detail') {
+          const newDetail = Math.max(280, startVals.detail + dx);
+          const newBar = Math.max(240, startVals.bar - dx);
+          main.style.setProperty('--col-detail', newDetail + 'px');
+          main.style.setProperty('--col-bar', newBar + 'px');
+        }
+        if (state.zoom === 0) applyZoom();
+        updateMinimap();
+      };
+      const onUp = () => {
+        r.classList.remove('active');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  });
+}
+
+// 键盘切图
+function setupKeyboard() {
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if (e.key === 'ArrowLeft') {
+      if (state.imageIdx > 0) {
+        state.imageIdx--;
+        renderImage(state.imageIdx);
+        renderImageTabs();
+      }
+    } else if (e.key === 'ArrowRight') {
+      if (state.imageIdx < state.imageCount - 1) {
+        state.imageIdx++;
+        renderImage(state.imageIdx);
+        renderImageTabs();
+      }
+    } else if (e.key === 'Escape') {
+      state.selection = null;
+      renderBar();
+      renderDetail(null);
+      redrawOverlay();
+    } else if (e.key === '0') {
+      state.zoom = 0;
+      applyZoom();
+      redrawOverlay();
+    } else if (e.key === '1') {
+      state.zoom = 1;
+      applyZoom();
+      redrawOverlay();
+    } else if (e.key === '+' || e.key === '=') {
+      state.zoom = Math.min(5, currentZoom() * 1.2);
+      applyZoom();
+      redrawOverlay();
+    } else if (e.key === '-') {
+      state.zoom = Math.max(0.1, currentZoom() * 0.83);
+      applyZoom();
+      redrawOverlay();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // 切选中题(上/下一空)
+      e.preventDefault();
+      navigateSelection(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      // Enter / 空格:切换当前选中空的对错状态
+      if (state.selection) {
+        e.preventDefault();
+        const { question: q, subIdx } = state.selection;
+        toggleMarkAndRefresh(q, subIdx);
+      }
+    }
+  });
+}
+
+// 切换到上/下一个空(跨题跨图跨学生)
+function collectUnits() {
+  const units = [];
+  for (const q of state.paper.result) {
+    const t = q.question_type;
+    if (t === '选择题' || t === '综合题') {
+      units.push({ q, subIdx: null });
+    } else {
+      const chips = getChipsData(q, t);
+      chips.forEach((c, i) => units.push({ q, subIdx: i }));
+    }
+  }
+  return units;
+}
+
+function navigateSelection(direction) {
+  if (!state.paper) return;
+  const units = collectUnits();
+  if (units.length === 0) return;
+  let curIdx = -1;
+  if (state.selection) {
+    curIdx = units.findIndex(u => u.q.question_id === state.selection.qid && u.subIdx === state.selection.subIdx);
+  }
+  const nextIdx = curIdx + direction;
+  if (nextIdx < 0) {
+    // 越界:切上一学生,选最后一题
+    if (state.paperIdx > 0) {
+      loadPaper(state.paperIdx - 1).then(() => {
+        const u = collectUnits();
+        if (u.length > 0) selectQuestion(u[u.length - 1].q, u[u.length - 1].subIdx);
+      });
+    }
+    return;
+  }
+  if (nextIdx >= units.length) {
+    // 越界:切下一学生,选第一题
+    if (state.paperIdx < PAPERS.length - 1) {
+      loadPaper(state.paperIdx + 1).then(() => {
+        const u = collectUnits();
+        if (u.length > 0) selectQuestion(u[0].q, u[0].subIdx);
+      });
+    }
+    return;
+  }
+  const u = units[nextIdx];
+  selectQuestion(u.q, u.subIdx);
+}
+
+// 选中题自动滚动到视口
+function scrollSelectionIntoView() {
+  if (!state.selection) return;
+  const wrap = document.getElementById('canvas-wrap');
+  const pane = document.getElementById('canvas-pane');
+  // 找选中题的 region 或 bbox 位置
+  const { question: q, subIdx } = state.selection;
+  let targetY = null, targetX = null;
+  if (subIdx !== null) {
+    const regions = sortedRegions(q);
+    if (subIdx < regions.length) {
+      const r = regions[subIdx];
+      targetY = r.y * (wrap.offsetHeight / state.natH);
+      targetX = r.x * (wrap.offsetWidth / state.natW);
+    }
+  }
+  if (targetY === null && q.bbox && q.bbox[0]) {
+    const b = q.bbox[0];
+    const ys = b.bbox.map(p => p.y);
+    const xs = b.bbox.map(p => p.x);
+    targetY = Math.min(...ys) * (wrap.offsetHeight / state.natH);
+    targetX = Math.min(...xs) * (wrap.offsetWidth / state.natW);
+  }
+  if (targetY === null) return;
+  // 计算视口范围
+  const viewTop = pane.scrollTop;
+  const viewBottom = viewTop + pane.clientHeight;
+  const viewLeft = pane.scrollLeft;
+  const viewRight = viewLeft + pane.clientWidth;
+  const wrapTop = wrap.offsetTop;
+  const wrapLeft = wrap.offsetLeft;
+  const absY = wrapTop + targetY;
+  const absX = wrapLeft + targetX;
+  if (absY < viewTop + 50 || absY > viewBottom - 100) {
+    pane.scrollTo({ top: Math.max(0, absY - 100), behavior: 'smooth' });
+  }
+  if (absX < viewLeft + 50 || absX > viewRight - 50) {
+    pane.scrollTo({ left: Math.max(0, absX - 50), behavior: 'smooth' });
+  }
+}
+
+// ============ Bar 渲染(核心:按题型差异化) ============
+function renderBar() {
+  const pane = document.getElementById('bar-pane');
+  pane.innerHTML = '';
+  const groups = groupByType();
+
+  const typeLabels = {
+    '选择题': '选择题(每题一个判定单元)',
+    '解答题': '解答题(子题级判定,is_right_parts)',
+    '填空题': '填空题(空级判定,is_right_parts)',
+    '综合题': '综合题(粒度不稳定,降级为整题)',
+  };
+
+  const order = ['选择题', '解答题', '填空题', '综合题'];
+  for (const type of order) {
+    const qs = groups[type] || [];
+    if (qs.length === 0) continue;
+    pane.appendChild(renderGroup(type, typeLabels[type] || type, qs));
+  }
+}
+
+function groupByType() {
+  const g = {};
+  for (const q of state.paper.result) {
+    const t = q.question_type || '其他';
+    if (!g[t]) g[t] = [];
+    g[t].push(q);
+  }
+  // 按 qid 数字排序
+  for (const k in g) {
+    g[k].sort((a, b) => {
+      const ai = parseInt(a.question_id), bi = parseInt(b.question_id);
+      if (isNaN(ai) || isNaN(bi)) return String(a.question_id).localeCompare(String(b.question_id));
+      return ai - bi;
+    });
+  }
+  return g;
+}
+
+function renderGroup(type, label, qs) {
+  const div = document.createElement('div');
+  div.className = 'group';
+
+  // 统计(解答题按空级,其他按现有粒度)
+  let okN = 0, badN = 0, naN = 0, totalSub = 0;
+  for (const q of qs) {
+    if (type === '选择题' || type === '综合题') {
+      totalSub += 1;
+      if (q.is_right === true) okN++;
+      else if (q.is_right === false) badN++;
+      else naN++;
+    } else if (type === '解答题') {
+      const parts = q.is_right_parts || [];
+      const blanks = parseBlanksBySubquestion(q);
+      if (blanks.length === 0) {
+        totalSub += 1;
+        if (q.is_right === true) okN++;
+        else if (q.is_right === false) badN++;
+        else naN++;
+      } else {
+        totalSub += blanks.length;
+        for (const b of blanks) {
+          const p = parts[b.subQ - 1];
+          if (p === true) okN++;
+          else if (p === false) badN++;
+          else naN++;
+        }
+      }
+    } else {
+      const parts = q.is_right_parts || [];
+      if (parts.length === 0) { totalSub += 1; q.is_right === true ? okN++ : q.is_right === false ? badN++ : naN++; continue; }
+      totalSub += parts.length;
+      for (const p of parts) {
+        if (p === true) okN++;
+        else if (p === false) badN++;
+        else naN++;
+      }
+    }
+  }
+
+  const header = document.createElement('div');
+  header.className = 'group-header';
+  header.innerHTML = `
+    <span>${label} <span class="count">(${qs.length} 题 / ${totalSub} 单元)</span></span>
+    <span class="summary">
+      <span class="ok">✓${okN}</span>
+      <span class="bad">✗${badN}</span>
+      <span class="na">—${naN}</span>
+    </span>
+  `;
+  div.appendChild(header);
+
+  const chipsWrap = document.createElement('div');
+  chipsWrap.className = 'chips';
+
+  for (const q of qs) {
+    if (type === '选择题') {
+      chipsWrap.appendChild(renderChoiceChip(q));
+    } else if (type === '综合题') {
+      chipsWrap.appendChild(renderSynthesisCard(q));
+    } else {
+      // 解答题 / 填空题:大卡片,内含子题/空级 chip
+      chipsWrap.appendChild(renderSubjectiveCard(q, type));
+    }
+  }
+
+  div.appendChild(chipsWrap);
+  return div;
+}
+
+function statusClass(v) {
+  if (v === true) return 'ok';
+  if (v === false) return 'bad';
+  return 'na';
+}
+
+function renderChoiceChip(q) {
+  const chip = document.createElement('div');
+  const status = combinedStatus(q, null);
+  chip.className = 'chip ' + status;
+  const sym = status === 'user-bad' ? '✗' : status === 'ok' ? '✓' : status === 'bad' ? '✗' : '—';
+  const sub = status === 'user-bad' ? '手标' : '';
+  chip.innerHTML = `<div>${q.question_id || '?'}</div><div class="sub">${sym}${sub ? ' ' + sub : ''}</div>`;
+  chip.addEventListener('click', () => {
+    if (isActive(q.question_id, null)) toggleMarkAndRefresh(q, null);
+    else selectQuestion(q, null);
+  });
+  if (isActive(q.question_id, null)) chip.classList.add('active');
+  return chip;
+}
+
+// 已选中的 chip 再次点击 → 切换错误状态
+function toggleMarkAndRefresh(q, subIdx) {
+  toggleUserMark(q.question_id, subIdx);
+  renderBar();
+  redrawOverlay();
+  renderDetail(state.selection);
+  renderStats();
+}
+
+function renderSubjectiveCard(q, type) {
+  const card = document.createElement('div');
+  card.className = 'big-card';
+  card.style.flexBasis = '100%';
+
+  const parts = q.is_right_parts || [];
+  const chipsData = getChipsData(q, type);
+  const unitCount = chipsData.length;
+  const unitLabel = '空';
+
+  // 整题汇总
+  const allRight = chipsData.length > 0 && chipsData.every(c => c.backend === true);
+  const allFalse = chipsData.length > 0 && chipsData.every(c => c.backend === false);
+  const indicator = allRight ? '✓ 全对' : allFalse ? '✗ 全错' : unitCount > 0 ? '— 部分' : (q.is_right === true ? '✓' : q.is_right === false ? '✗' : '—');
+  const indClass = allRight ? 'ok' : allFalse ? 'bad' : 'na';
+
+  const header = document.createElement('div');
+  header.className = 'big-card-header';
+  header.innerHTML = `
+    <span class="qid">第 ${q.question_id || '?'} 题</span>
+    <span class="qtype">${type}</span>
+    <span style="font-size:12px;color:#6e6e73">${unitCount} 个${unitLabel}</span>
+    <span class="indicator ${indClass}">${indicator}</span>
+  `;
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'big-card-body';
+  const innerChips = document.createElement('div');
+  innerChips.className = 'chips';
+
+  chipsData.forEach(({ idx, label, backend }) => {
+    const chip = document.createElement('div');
+    const status = combinedStatus(q, idx);
+    chip.className = 'chip ' + status;
+    const sym = status === 'user-bad' ? '✗' : backend === true ? '✓' : backend === false ? '✗' : '—';
+    const sub = status === 'user-bad' ? '手标' : '';
+    chip.innerHTML = `<div>${label}</div><div class="sub">${sym}${sub ? ' ' + sub : ''}</div>`;
+    chip.title = `第 ${label} 单元(再次点击切换标记)`;
+    chip.addEventListener('click', () => {
+      if (isActive(q.question_id, idx)) toggleMarkAndRefresh(q, idx);
+      else selectQuestion(q, idx);
+    });
+    if (isActive(q.question_id, idx)) chip.classList.add('active');
+    innerChips.appendChild(chip);
+  });
+  body.appendChild(innerChips);
+  card.appendChild(body);
+
+  return card;
+}
+
+function renderSynthesisCard(q) {
+  // 综合题:整题一个 chip,粒度不可靠
+  const card = document.createElement('div');
+  card.className = 'big-card';
+  card.style.flexBasis = '100%';
+
+  const header = document.createElement('div');
+  header.className = 'big-card-header';
+  header.innerHTML = `
+    <span class="qid">第 ${q.question_id || '?'} 题</span>
+    <span class="qtype">综合题</span>
+    <span style="font-size:12px;color:#8e8e93">整题判定(数据不稳定)</span>
+    <span class="indicator ${statusClass(q.is_right)}">${q.is_right === true ? '✓' : q.is_right === false ? '✗' : '—'}</span>
+  `;
+  header.addEventListener('click', () => {
+    if (isActive(q.question_id, null)) toggleMarkAndRefresh(q, null);
+    else selectQuestion(q, null);
+  });
+  if (isActive(q.question_id, null)) header.style.background = '#e8f2ff';
+
+  card.appendChild(header);
+  return card;
+}
+
+function isActive(qid, subIdx) {
+  return state.selection && state.selection.qid === qid && state.selection.subIdx === subIdx;
+}
+
+// ============ 选中题 ============
+// 把 regions 按"阅读顺序"排序(先 y 后 x),修复双栏排版下索引错位
+function sortedRegions(q) {
+  const regions = q.answer_regions || [];
+  return regions.map((r, origIdx) => {
+    const bx = r.bbox;
+    const xs = bx.map(p => p.x), ys = bx.map(p => p.y);
+    return {
+      image_idx: r.image_idx,
+      bbox: r.bbox,
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      origIdx,
+    };
+  }).sort((a, b) => (a.y - b.y) || (a.x - b.x));
+}
+
+function sortedAreas(q) {
+  const areas = q.answer_areas || [];
+  return areas.map((a, origIdx) => {
+    const bx = a.bbox;
+    const xs = bx.map(p => p.x), ys = bx.map(p => p.y);
+    return {
+      image_idx: a.image_idx,
+      bbox: a.bbox,
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      origIdx,
+    };
+  }).sort((a, b) => (a.y - b.y) || (a.x - b.x));
+}
+
+function pickImageForSelection(q, subIdx) {
+  // 优先级:具体空/子题的 region(按阅读顺序)> area > bbox[0] > 0
+  if (subIdx !== null) {
+    const regions = sortedRegions(q);
+    const areas = sortedAreas(q);
+    if (regions.length > 0) {
+      const idx = Math.min(subIdx, regions.length - 1);
+      return regions[idx].image_idx;
+    }
+    if (areas.length > 0) {
+      const idx = Math.min(subIdx, areas.length - 1);
+      return areas[idx].image_idx;
+    }
+  }
+  if (q.bbox && q.bbox[0]) return q.bbox[0].image_idx;
+  return 0;
+}
+
+function selectQuestion(q, subIdx) {
+  state.selection = { qid: q.question_id, subIdx, question: q };
+  // 根据具体空/子题的位置决定切换到哪张图
+  const targetImg = pickImageForSelection(q, subIdx);
+  if (targetImg !== state.imageIdx) {
+    state.imageIdx = targetImg;
+    renderImage(targetImg);
+    renderImageTabs();
+  } else {
+    redrawOverlay();
+    setTimeout(scrollSelectionIntoView, 0);
+  }
+  renderBar();
+  renderDetail(state.selection);
+}
+
+// ============ 画框 ============
+function redrawOverlay() {
+  const wrap = document.getElementById('canvas-wrap');
+  // 清除旧 box
+  wrap.querySelectorAll('.box').forEach(el => el.remove());
+  if (!state.paper || !state.natW) return;
+
+  const selQid = state.selection && state.selection.qid;
+  const selSubIdx = state.selection && state.selection.subIdx;
+
+  // 1. 题目外框
+  if (state.showBbox) {
+    for (const q of state.paper.result) {
+      for (const b of (q.bbox || [])) {
+        if (b.image_idx !== state.imageIdx) continue;
+        const isSel = q.question_id === selQid;
+        drawBox(wrap, b.bbox, isSel ? 'box box-bbox box-active' : 'box box-bbox');
+      }
+    }
+  }
+
+  // 2. 答题线 / 笔迹框 — 勾选了就画当前图所有题的所有 region/area
+  // 选中题:该题所有框正常浅色显示,第 subIdx 个(按阅读顺序)额外加深作为"大致位置"提示
+  // region/area 可点击:点击 → 切换用户标记(错 ↔ 默认)+ 同时选中
+  if (state.showRegion || state.showArea) {
+    for (const q of state.paper.result) {
+      const isSel = q.question_id === selQid;
+      const parts = q.is_right_parts || [];
+
+      // 决定每个 region 的 subIdx 语义:
+      // 选择题:整题 subIdx=null
+      // 解答题/填空题:subIdx = i,但 clamp 到 chip 数(避免 area 数 > chip 数时点击失效)
+      const blanks = q.question_type === '解答题' ? parseBlanksBySubquestion(q) : null;
+      const useSubIdx = blanks ? true : (q.question_type !== '选择题' && parts.length > 1);
+      const chipsData = useSubIdx ? getChipsData(q, q.question_type) : null;
+      const maxChipIdx = chipsData ? chipsData.length - 1 : 0;
+
+      if (state.showRegion) {
+        const regions = sortedRegions(q);
+        const regionIdx = (isSel && selSubIdx !== null) ? Math.min(selSubIdx, regions.length - 1) : -1;
+        const allActive = isSel && selSubIdx === null;  // 整题选中:所有 region 高亮
+        for (let i = 0; i < regions.length; i++) {
+          const r = regions[i];
+          if (r.image_idx !== state.imageIdx) continue;
+          let cls = 'box box-region clickable';
+          if (i === regionIdx || allActive) cls += ' box-active';
+          const subIdx = useSubIdx ? Math.min(i, maxChipIdx) : null;
+          if (getUserMark(q.question_id, subIdx) === 'bad') cls += ' user-marked';
+          const box = drawBox(wrap, r.bbox, cls);
+          if (!box) continue;
+          box.dataset.qid = q.question_id;
+          box.dataset.subIdx = subIdx === null ? '' : String(subIdx);
+          box.addEventListener('click', e => {
+            e.stopPropagation();
+            const si = box.dataset.subIdx === '' ? null : parseInt(box.dataset.subIdx);
+            toggleUserMark(q.question_id, si);
+            selectQuestion(q, si);
+          });
+        }
+      }
+      if (state.showArea) {
+        const areas = sortedAreas(q);
+        const areaIdx = (isSel && selSubIdx !== null) ? Math.min(selSubIdx, areas.length - 1) : -1;
+        const allActive = isSel && selSubIdx === null;
+        for (let i = 0; i < areas.length; i++) {
+          const a = areas[i];
+          if (a.image_idx !== state.imageIdx) continue;
+          let cls = 'box box-area clickable';
+          if (i === areaIdx || allActive) cls += ' box-active';
+          const subIdx = useSubIdx ? Math.min(i, maxChipIdx) : null;
+          if (getUserMark(q.question_id, subIdx) === 'bad') cls += ' user-marked';
+          const box = drawBox(wrap, a.bbox, cls);
+          if (!box) continue;
+          box.dataset.qid = q.question_id;
+          box.dataset.subIdx = subIdx === null ? '' : String(subIdx);
+          box.addEventListener('click', e => {
+            e.stopPropagation();
+            const si = box.dataset.subIdx === '' ? null : parseInt(box.dataset.subIdx);
+            toggleUserMark(q.question_id, si);
+            selectQuestion(q, si);
+          });
+        }
+      }
+    }
+  }
+}
+
+function drawBox(parent, bboxPoints, cls) {
+  if (!bboxPoints || bboxPoints.length === 0) return null;
+  const xs = bboxPoints.map(p => p.x), ys = bboxPoints.map(p => p.y);
+  if (!xs.length || !ys.length) return null;
+  const x1 = Math.min(...xs), x2 = Math.max(...xs);
+  const y1 = Math.min(...ys), y2 = Math.max(...ys);
+  if (!state.natW || !state.natH) return null;
+  const div = document.createElement('div');
+  div.className = cls;
+  div.style.left = (x1 / state.natW * 100) + '%';
+  div.style.top = (y1 / state.natH * 100) + '%';
+  div.style.width = ((x2 - x1) / state.natW * 100) + '%';
+  div.style.height = ((y2 - y1) / state.natH * 100) + '%';
+  parent.appendChild(div);
+  return div;
+}
+
+// ============ 统计 / 详情 ============
+function renderStats() {
+  let okN = 0, badN = 0, userBadN = 0, reasonN = 0, total = 0;
+  for (const q of state.paper.result) {
+    const t = q.question_type;
+    let chipsCount;
+    if (t === '选择题' || t === '综合题') {
+      chipsCount = 1;
+    } else {
+      const chips = getChipsData(q, t);
+      chipsCount = chips.length;
+    }
+    total += chipsCount;
+
+    for (let i = 0; i < chipsCount; i++) {
+      const subIdx = (t === '选择题' || t === '综合题') ? null : i;
+      const uMark = getUserMark(q.question_id, subIdx);
+      const reason = getErrorReason(q.question_id, subIdx);
+      if (reason && reason.category) reasonN++;
+      if (uMark === 'bad') {
+        userBadN++;
+        continue;
+      }
+      const b = backendStatus(q, subIdx);
+      if (b === true) okN++;
+      else if (b === false) badN++;
+    }
+  }
+  document.getElementById('stats').textContent =
+    `共 ${total} 单元:✓${okN} ✗${badN}${userBadN > 0 ? ` ✗手${userBadN}` : ''}${reasonN > 0 ? ` 原因${reasonN}` : ''}`;
+}
+
+function renderDetail(sel) {
+  const pane = document.getElementById('detail-pane');
+  if (!sel) {
+    pane.innerHTML = '<div class="detail-empty">点击右侧题号查看详情,或直接点卷面答题线标记为错</div>';
+    return;
+  }
+  const { question: q, subIdx } = sel;
+  const taskId = state.paper.task_id;
+  const bStatus = backendStatus(q, subIdx);
+  const uMark = getUserMark(q.question_id, subIdx);
+  const reason = getErrorReason(q.question_id, subIdx);
+
+  const refAns = (q.final_right_answer || '').split(';');
+  const usrAns = (q.user_final_answer || '').split(';');
+  const ansIdx = subIdx !== null && refAns.length > 0 ? Math.min(subIdx, refAns.length - 1) : -1;
+  const refText = (ansIdx >= 0 ? (refAns[ansIdx] || '') : (q.final_right_answer || '')).trim();
+  const usrText = (ansIdx >= 0 ? (usrAns[ansIdx] || '') : (q.user_final_answer || '')).trim();
+  const qfull = (q.question || '').replace(/\n+/g, ' ').trim();
+
+  const bText = bStatus === true ? '✓ 对' : bStatus === false ? '✗ 错' : '— 未判定';
+  const bClass = bStatus === true ? 'ok' : bStatus === false ? 'bad' : '';
+  const imgIdx = (q.bbox && q.bbox[0]) ? q.bbox[0].image_idx : 0;
+  const parts = q.is_right_parts || [];
+
+  // 单元总数 = max(blanks, regions)(和 chip 数对齐)
+  const chipsData = (q.question_type === '解答题' || q.question_type === '填空题')
+    ? getChipsData(q, q.question_type)
+    : null;
+  const unitCount = chipsData ? chipsData.length : parts.length;
+  const curChip = chipsData && subIdx !== null ? chipsData[subIdx] : null;
+
+  let html = '';
+
+  // ① task-id
+  html += `<div class="detail-section">
+    <h3>Task ID</h3>
+    <div class="taskid-row">
+      <span class="id-text">${escape(taskId)}</span>
+      <button class="copy-btn" onclick="copyTaskId()">复制</button>
+    </div>
+  </div>`;
+
+  // ② 元信息
+  const isMarked = uMark === 'bad';
+  html += `<div class="detail-section">
+    <h3>元信息</h3>
+    <div class="meta-grid">
+      <span class="k">题号</span><span class="v">第 ${escape(q.question_id || '?')} 题</span>
+      <span class="k">题型</span><span class="v">${escape(q.question_type || '?')}</span>
+      <span class="k">所在图</span><span class="v">图 ${imgIdx + 1}</span>
+      ${subIdx !== null ? `<span class="k">单元</span><span class="v">${subIdx + 1} / ${unitCount}${curChip ? ` · ${curChip.label}` : ''}</span>` : ''}
+      <span class="k">后端判定</span><span class="v ${bClass}">${bText}</span>
+      ${isMarked ? `<span class="k">用户标记</span><span class="v user-bad">✗ 手标错</span>` : ''}
+    </div>
+    <div style="margin-top:10px; display: flex; gap: 6px">
+      <button class="mark-btn ${isMarked ? 'marked' : ''}" id="mark-btn">${isMarked ? '✗ 取消手标' : '标记为错'}</button>
+      <button class="compare-btn" style="flex:1" onclick="showReferenceCompare('${q.question_id}')">📖 对照参考</button>
+    </div>
+  </div>`;
+
+  // ③ 题干(折叠)
+  if (qfull) {
+    html += `<div class="detail-section">
+      <h3>题干</h3>
+      <div class="fold ${qfull.length > 12 ? 'collapsed' : ''}" data-fold="q">${escape(qfull)}</div>
+    </div>`;
+  }
+
+  // ④ 该空详情
+  html += `<div class="detail-section">
+    <h3>该空详情</h3>
+    <div style="font-size:11px;color:#8e8e93;margin-bottom:4px">参考答案</div>
+    <div class="fold ${refText.length > 12 ? 'collapsed' : ''}" data-fold="ref">${refText ? escape(refText) : '<span class="reason-empty">(空)</span>'}</div>
+    <div style="font-size:11px;color:#8e8e93;margin:8px 0 4px">学生作答</div>
+    <div class="fold ${usrText.length > 12 ? 'collapsed' : ''}" data-fold="usr" ${(bStatus === false || uMark === 'bad') ? 'style="border-left:3px solid #d70015;padding-left:8px"' : ''}>${usrText ? escape(usrText) : '<span class="reason-empty">(空)</span>'}</div>
+  </div>`;
+
+  // ⑤ 错误原因
+  html += `<div class="detail-section">
+    <h3>错误原因(单选)</h3>
+    <div class="reason-grid-4">`;
+  for (const cat of REASON_CATEGORIES) {
+    const active = reason && reason.category === cat.id;
+    const style = active ? `background:${cat.color};border-color:${cat.color};color:#fff` : '';
+    html += `<button class="reason-btn ${active ? 'active' : ''}" style="${style}" data-cat="${cat.id}">
+      <span class="dot" style="background:${cat.color};${active ? 'background:#fff' : ''}"></span>${cat.label}
+    </button>`;
+  }
+  html += `</div>`;
+
+  if (reason && reason.category) {
+    const cat = REASON_CATEGORIES.find(c => c.id === reason.category);
+    if (cat) {
+      html += `<div class="reason-grid-2" style="margin-top:6px">`;
+      for (const sub of cat.subtypes) {
+        const active = reason.subtype === sub.id;
+        const style = active ? `background:${cat.color};border-color:${cat.color};color:#fff` : '';
+        html += `<button class="reason-btn ${active ? 'active' : ''}" style="${style}" data-subtype="${sub.id}">${sub.label}</button>`;
+      }
+      html += `</div>`;
+    }
+  } else {
+    html += `<div class="reason-empty">请先选错误大类</div>`;
+  }
+
+  html += `<textarea class="reason-comment" placeholder="点击添加备注..." rows="1">${reason ? escape(reason.comment || '') : ''}</textarea>`;
+  if (reason) {
+    html += `<button class="reason-clear" data-clear="1">清除错误原因</button>`;
+  }
+  html += `</div>`;
+
+  pane.innerHTML = html;
+  bindDetailEvents(sel);
+}
+
+function bindDetailEvents(sel) {
+  const pane = document.getElementById('detail-pane');
+  const { question: q, subIdx } = sel;
+
+  // 折叠
+  pane.querySelectorAll('.fold.collapsed').forEach(el => {
+    el.addEventListener('click', () => el.classList.toggle('collapsed'));
+  });
+
+  // 标记为错按钮
+  const markBtn = pane.querySelector('#mark-btn');
+  if (markBtn) {
+    markBtn.addEventListener('click', () => {
+      toggleUserMark(q.question_id, subIdx);
+      renderBar();
+      redrawOverlay();
+      renderDetail(state.selection);
+      renderStats();
+    });
+  }
+
+  // 大类按钮
+  pane.querySelectorAll('.reason-btn[data-cat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = btn.dataset.cat;
+      const r = getErrorReason(q.question_id, subIdx) || {};
+      // 单选:点同一个大类 → 取消;点不同大类 → 切换
+      if (r.category === cat) {
+        clearErrorReason(q.question_id, subIdx);
+      } else {
+        setErrorReason(q.question_id, subIdx, { category: cat, subtype: null, comment: r.comment || '' });
+      }
+      renderDetail(state.selection);
+    });
+  });
+
+  // 子类按钮
+  pane.querySelectorAll('.reason-btn[data-subtype]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const subtype = btn.dataset.subtype;
+      const r = getErrorReason(q.question_id, subIdx) || {};
+      setErrorReason(q.question_id, subIdx, { category: r.category, subtype: subtype === r.subtype ? null : subtype, comment: r.comment || '' });
+      renderDetail(state.selection);
+    });
+  });
+
+  // 备注
+  const comment = pane.querySelector('.reason-comment');
+  if (comment) {
+    // 初始化自动高度(延迟以让浏览器先布局)
+    requestAnimationFrame(() => {
+      comment.style.height = 'auto';
+      comment.style.height = Math.max(28, comment.scrollHeight) + 'px';
+    });
+    comment.addEventListener('input', () => {
+      const r = getErrorReason(q.question_id, subIdx);
+      if (!r) return;  // 没选大类不持久化
+      r.comment = comment.value;
+      comment.style.height = 'auto';
+      comment.style.height = Math.max(28, comment.scrollHeight) + 'px';
+    });
+  }
+
+  // 清除
+  const clr = pane.querySelector('.reason-clear');
+  if (clr) {
+    clr.addEventListener('click', () => {
+      clearErrorReason(q.question_id, subIdx);
+      renderDetail(state.selection);
+    });
+  }
+}
+
+function escape(s) {
+  return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+}
+
+init();
+</script>
+</body>
+</html>
