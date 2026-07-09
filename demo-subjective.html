@@ -338,7 +338,9 @@
   </div>
   <span class="stats" id="stats"></span>
   <button id="shortcut-btn" title="显示/隐藏快捷键说明">⌨ 快捷键</button>
-  <button id="export-btn" title="导出全部批改结果(JSON)">📦 导出</button>
+  <button id="export-btn" title="导出全部批改结果(JSON)">📦 导出 JSON</button>
+  <button id="export-excel-btn" title="导出 Excel 统计表">📊 导出 Excel</button>
+  <input id="grouping-input" placeholder="大题分组,如:1-8,9-11" style="font-size:12px;width:140px;padding:4px 8px;border:1px solid #d2d2d6;border-radius:6px" title="设置大题的题号范围，用逗号分隔">
 </header>
 
 <div class="shortcut-panel" id="shortcut-panel">
@@ -612,6 +614,12 @@ function init() {
   });
   document.getElementById('import-btn').addEventListener('click', importFolder);
   document.getElementById('export-btn').addEventListener('click', exportAll);
+  document.getElementById('export-excel-btn').addEventListener('click', exportExcel);
+  // Restore saved grouping
+  try {
+    const saved = localStorage.getItem('trend2post_grouping');
+    if (saved) document.getElementById('grouping-input').value = saved;
+  } catch(e) {}
 
   setupZoomPan();
   setupKeyboard();
@@ -727,9 +735,15 @@ function commitCurrentPaper() {
 
 function exportAll() {
   commitCurrentPaper();
-  const entries = Object.entries(state.allPapersResults);
+  const entries = [];
+  for (let i = 0; i < PAPERS.length; i++) {
+    const saved = state.allPapersResults[i];
+    const p = PAPERS[i];
+    if (!p || !p.taskData) continue;
+    entries.push([i, saved || { folder: p.folder, task_id: p.task_id, user_marks: {}, error_reasons: {} }]);
+  }
   if (entries.length === 0) {
-    alert('暂无可导出的批改结果\n请先在卷子上标记错误');
+    alert('暂无可导出的批改结果\n请先导入试卷');
     return;
   }
   const out = {
@@ -746,6 +760,297 @@ function exportAll() {
   const a = document.createElement('a');
   a.href = url;
   a.download = `主观题批改结果_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportExcel() {
+  commitCurrentPaper();
+  // Include ALL papers that were loaded, not just those with marks
+  const entries = [];
+  for (let i = 0; i < PAPERS.length; i++) {
+    const saved = state.allPapersResults[i];
+    const p = PAPERS[i];
+    if (!p || !p.taskData) continue;
+    entries.push([
+      i,
+      saved || { folder: p.folder, task_id: p.task_id, user_marks: {}, error_reasons: {} }
+    ]);
+  }
+  if (entries.length === 0) {
+    alert('暂无可导出的批改结果\n请先导入试卷');
+    return;
+  }
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+
+  // Collect ALL question IDs from taskData AND user_marks
+  const allQids = new Set();
+  entries.forEach(([idx, r]) => {
+    const p = PAPERS[parseInt(idx)];
+    if (p && p.taskData && p.taskData.result) {
+      p.taskData.result.forEach(q => allQids.add(String(q.question_id || q.qid || '')));
+    }
+    // Also from user_marks (in case taskData is missing some)
+    Object.keys(r.user_marks || {}).forEach(k => allQids.add(k.split('-')[0]));
+  });
+  const qidList = Array.from(allQids).sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return a.localeCompare(b);
+  });
+  const totalQuestions = qidList.length;
+
+  // Detect 大题 groupings
+  let questionGroups = [];
+  // 1) Try user input from header (e.g. "1-8,9-11")
+  const groupingInput = document.getElementById('grouping-input');
+  const groupingStr = (groupingInput && groupingInput.value || '').trim();
+  if (groupingStr) {
+    const parts = groupingStr.split(/[,，\s]+/);
+    parts.forEach(part => {
+      const range = part.split('-');
+      if (range.length === 2) {
+        const start = parseInt(range[0]), end = parseInt(range[1]);
+        const group = [];
+        for (let n = start; n <= end; n++) {
+          if (qidList.includes(String(n))) group.push(String(n));
+        }
+        if (group.length > 0) questionGroups.push(group);
+      }
+    });
+    // Save to localStorage
+    try { localStorage.setItem('trend2post_grouping', groupingStr); } catch(e) {}
+  }
+  // 2) Try localStorage
+  if (questionGroups.length === 0) {
+    try {
+      const saved = localStorage.getItem('trend2post_grouping');
+      if (saved) {
+        const parts = saved.split(/[,，\s]+/);
+        parts.forEach(part => {
+          const range = part.split('-');
+          if (range.length === 2) {
+            const start = parseInt(range[0]), end = parseInt(range[1]);
+            const group = [];
+            for (let n = start; n <= end; n++) {
+              if (qidList.includes(String(n))) group.push(String(n));
+            }
+            if (group.length > 0) questionGroups.push(group);
+          }
+        });
+        if (questionGroups.length > 0 && groupingInput) groupingInput.value = saved;
+      }
+    } catch(e) {}
+  }
+  // 3) Auto-detect from question text (e.g. "一、单项选择题（本大题共8小题）")
+  if (questionGroups.length === 0) {
+    for (const [idx, r] of entries) {
+      const p = PAPERS[parseInt(idx)];
+      if (p && p.taskData && p.taskData.result) {
+        // Find questions whose text starts a new section (一、 二、 三、 etc)
+        const sectionStarts = [];
+        p.taskData.result.forEach((q, qi) => {
+          const txt = q.question || '';
+          const m = txt.match(/^[一二三四五六七八九十]、/);
+          if (m) sectionStarts.push({ idx: qi, qid: String(q.question_id || q.qid) });
+        });
+        if (sectionStarts.length >= 2) {
+          // Group questions between section starts
+          for (let si = 0; si < sectionStarts.length; si++) {
+            const startIdx = sectionStarts[si].idx;
+            const endIdx = si + 1 < sectionStarts.length ? sectionStarts[si + 1].idx : p.taskData.result.length;
+            const group = [];
+            for (let gi = startIdx; gi < endIdx; gi++) {
+              const gqid = String(p.taskData.result[gi].question_id || p.taskData.result[gi].qid || '');
+              if (qidList.includes(gqid)) group.push(gqid);
+            }
+            if (group.length > 0) questionGroups.push(group);
+          }
+          break; // Use first paper with detectable sections
+        }
+      }
+    }
+  }
+  // 4) Fallback: each qid is its own group
+  if (questionGroups.length === 0) {
+    questionGroups = qidList.map(q => [q]);
+  }
+
+  // ---- Sheet 1: 套卷汇总 ----
+  const summaryRows = [];
+  summaryRows.push(['套卷', '答题区批改正确数', '试题批改正确数', '答题区批改正确率', '试题批改正确率', '错误选项']);
+
+  entries.forEach(([idx, r]) => {
+    const marks = r.user_marks || {};
+
+    // Per-question: unmarked=1(正确), marked bad=0(错误)
+    const questionResults = {};
+    qidList.forEach(qid => {
+      let isBad = false;
+      Object.entries(marks).forEach(([k, v]) => {
+        const kQid = k.split('-')[0];
+        if (String(kQid) === String(qid) && v === 'bad') {
+          isBad = true;
+        }
+      });
+      questionResults[qid] = isBad ? '0' : '1';
+    });
+
+    // 答题区批改正确数 = count of questions marked as 1
+    const qCorrectCount = Object.values(questionResults).filter(v => v === '1').length;
+
+    // 试题批改正确数 = count of GROUPS where ALL questions are '1'
+    let groupCorrectCount = 0;
+    questionGroups.forEach(g => {
+      const allCorrect = g.every(qid => questionResults[qid] === '1');
+      if (allCorrect) groupCorrectCount++;
+    });
+
+    // 错误选项 = list of question numbers marked as 0
+    const wrongQids = Object.entries(questionResults)
+      .filter(([qid, v]) => v === '0')
+      .map(([qid]) => qid);
+    const wrongStr = wrongQids.length === 0 ? '无' : wrongQids.join('、');
+
+    const qRate = totalQuestions > 0 ? Math.round(qCorrectCount / totalQuestions * 100) + '%' : '0%';
+    const gRate = questionGroups.length > 0 ? Math.round(groupCorrectCount / questionGroups.length * 100) + '%' : '0%';
+
+    summaryRows.push([
+      `第${parseInt(idx)+1}套`,
+      String(qCorrectCount),
+      String(groupCorrectCount),
+      qRate,
+      gRate,
+      wrongStr
+    ]);
+  });
+
+  // ---- Sheet 2: 每套明细 ----
+  const detailRows = [];
+  // Group header row: 第一大题（题1-8）colspan=N, 第二大题（题9-11）colspan=M
+  const groupHeader = [{ text: '', colspan: 1 }];
+  questionGroups.forEach((g, gi) => {
+    const label = `第${['一','二','三','四','五','六','七','八'][gi] || (gi+1)}大题（题${g[0]}-${g[g.length-1]}）`;
+    groupHeader.push({ text: label, colspan: g.length });
+  });
+  // Columns not in any group
+  const groupedQids = new Set(questionGroups.flat());
+  const ungrouped = qidList.filter(q => !groupedQids.has(q));
+  if (ungrouped.length > 0) groupHeader.push({ text: '', colspan: ungrouped.length });
+  groupHeader.push({ text: '', colspan: 4 }); // summary columns
+
+  const header2 = ['套卷', ...qidList.map(q => `选项${q}`), '答题区批改正确数', '试题批改正确数', '答题区批改正确率', '试题批改正确率'];
+  detailRows.push({ type: 'group', cells: groupHeader });
+  detailRows.push(header2);
+
+  // For bottom stats
+  const correctCounts = {}; qidList.forEach(q => correctCounts[q] = 0);
+  const wrongCounts = {}; qidList.forEach(q => wrongCounts[q] = 0);
+
+  entries.forEach(([idx, r]) => {
+    const marks = r.user_marks || {};
+    const row = [`第${parseInt(idx)+1}套`];
+
+    const questionResults = {};
+    qidList.forEach(qid => {
+      let isBad = false;
+      Object.entries(marks).forEach(([k, v]) => {
+        const kQid = k.split('-')[0];
+        if (String(kQid) === String(qid) && v === 'bad') isBad = true;
+      });
+      const val = isBad ? '0' : '1';
+      questionResults[qid] = val;
+      row.push(val);
+      if (val === '1') correctCounts[qid]++;
+      if (val === '0') wrongCounts[qid]++;
+    });
+
+    const qCorrect = Object.values(questionResults).filter(v => v === '1').length;
+    let gCorrect = 0;
+    questionGroups.forEach(g => {
+      if (g.every(qid => questionResults[qid] === '1')) gCorrect++;
+    });
+
+    row.push(
+      String(qCorrect),
+      String(gCorrect),
+      totalQuestions > 0 ? Math.round(qCorrect / totalQuestions * 100) + '%' : '0%',
+      questionGroups.length > 0 ? Math.round(gCorrect / questionGroups.length * 100) + '%' : '0%'
+    );
+    detailRows.push(row);
+  });
+
+  // Bottom summary rows
+  const correctRateRow = ['正确率'];
+  const correctCountRow = ['正确次数'];
+  const wrongCountRow = ['错误次数'];
+  qidList.forEach(q => {
+    const total = correctCounts[q] + wrongCounts[q];
+    correctRateRow.push(total > 0 ? Math.round(correctCounts[q] / total * 100) + '%' : '-');
+    correctCountRow.push(String(correctCounts[q]));
+    wrongCountRow.push(String(wrongCounts[q]));
+  });
+  // Pad remaining columns
+  ['', '', '', ''].forEach(() => {
+    correctRateRow.push('');
+    correctCountRow.push('');
+    wrongCountRow.push('');
+  });
+  detailRows.push(correctRateRow, correctCountRow, wrongCountRow);
+
+  // Build XLS
+  const buildTable = (rows) => {
+    let html = '<table border="1" cellpadding="3" cellspacing="0" style="border-collapse:collapse;font-size:12px">';
+    rows.forEach((r, ri) => {
+      // Check if row is a group header row (has type:'group')
+      if (r && r.type === 'group') {
+        html += '<tr>';
+        r.cells.forEach(cell => {
+          const attrs = [];
+          if (cell.colspan && cell.colspan > 1) attrs.push(`colspan="${cell.colspan}"`);
+          attrs.push('style="background:#e8e8e8;font-weight:bold;text-align:center;font-size:11px"');
+          html += `<th ${attrs.join(' ')}>${cell.text}</th>`;
+        });
+        html += '</tr>';
+        return;
+      }
+      html += '<tr>';
+      r.forEach((c, ci) => {
+        // First data row after group header should also be styled as header
+        const isHeader = ri === 0 || ri === 1 || (r.type === 'group');
+        const tag = isHeader ? 'th' : 'td';
+        const isFirstCol = ci === 0;
+        let style;
+        if (isHeader) {
+          style = ri === 0 ? 'background:#e8e8e8;font-weight:bold;text-align:center;font-size:11px' : 'background:#f0f0f0;font-weight:bold;text-align:center';
+        } else {
+          style = isFirstCol ? 'text-align:left;font-weight:500' : 'text-align:center';
+        }
+        html += `<${tag} style="${style}">${c}</${tag}>`;
+      });
+      html += '</tr>';
+    });
+    html += '</table>';
+    return html;
+  };
+
+  const xls = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
+<x:ExcelWorksheet><x:Name>套卷汇总</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+<x:ExcelWorksheet><x:Name>每套明细</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>
+</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>
+<h2>套卷汇总</h2>${buildTable(summaryRows)}<br><br>
+<h2>每套明细</h2>${buildTable(detailRows)}
+</body></html>`;
+
+  const blob = new Blob([xls], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `主观题批改统计_${dateStr}.xls`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
