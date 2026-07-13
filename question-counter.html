@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>套卷对错统计</title>
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    background: #f5f2ec;
+    color: #202020;
+  }
+
+  button, select { font: inherit; }
+
+  .shell {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 14px;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .config-panel {
+    display: none;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid #cfc7ba;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .config-panel.open { display: block; }
+
+  .config-help {
+    margin: 0 0 8px;
+    color: #61584f;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .config-editor {
+    width: 100%;
+    min-height: 180px;
+    padding: 10px;
+    border: 1px solid #cfc7ba;
+    border-radius: 6px;
+    resize: vertical;
+    font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .config-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .config-message {
+    min-height: 20px;
+    margin-top: 6px;
+    color: #b42318;
+    font-size: 13px;
+  }
+
+  .select,
+  .task-input,
+  .btn {
+    height: 32px;
+    border: 1px solid #cfc7ba;
+    border-radius: 6px;
+    background: #fff;
+    color: #202020;
+  }
+
+  .select {
+    min-width: 128px;
+    padding: 0 10px;
+  }
+
+  .task-input {
+    width: 180px;
+    padding: 0 10px;
+  }
+
+  .task-input:focus {
+    border-color: #252525;
+    outline: 2px solid rgba(37, 37, 37, 0.12);
+  }
+
+  .btn {
+    padding: 0 10px;
+    cursor: pointer;
+  }
+
+  .btn:hover,
+  .select:hover,
+  .task-input:hover { background: #fbfaf7; }
+
+  .btn.primary {
+    border-color: #b91c1c;
+    background: #b91c1c;
+    color: #fff;
+  }
+
+  .btn.danger {
+    border-color: #dc2626;
+    color: #b91c1c;
+    background: #fff;
+  }
+
+  .btn.danger:hover { background: #fef2f2; }
+
+  .btn.dark {
+    border-color: #252525;
+    background: #252525;
+    color: #fff;
+  }
+
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .stat {
+    min-width: 0;
+    border: 1px solid #ded5c8;
+    border-radius: 6px;
+    background: #fff;
+    padding: 9px 10px;
+  }
+
+  .stat-label {
+    margin-bottom: 5px;
+    color: #6c6258;
+    font-size: 12px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .bar {
+    height: 12px;
+    margin-bottom: 12px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: #ded8cf;
+  }
+
+  .bar-fill {
+    width: 100%;
+    height: 100%;
+    background: #198754;
+    transition: width 160ms ease;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 10px;
+    align-items: start;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .section,
+  .side {
+    overflow: hidden;
+    border: 1px solid #ded5c8;
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .section-head,
+  .side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px;
+    background: #252525;
+    color: #fff;
+  }
+
+  .section-title,
+  .side-title {
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  .section-total {
+    color: #eee4d8;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .groups {
+    padding: 4px 7px 6px;
+  }
+
+  .group {
+    padding: 6px 0;
+    border-bottom: 1px solid #eee8df;
+  }
+
+  .group:last-child { border-bottom: 0; }
+
+  .group-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 5px;
+  }
+
+  .group-name {
+    font-weight: 800;
+  }
+
+  .group-note {
+    display: block;
+    margin-top: 2px;
+    color: #746a60;
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .group-total {
+    color: #61584f;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .blanks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+    gap: 5px;
+  }
+
+  .blank {
+    height: 26px;
+    border: 1px solid #b9dcc6;
+    border-radius: 5px;
+    background: #e7f6ec;
+    color: #176b45;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .blank:hover { filter: brightness(0.98); }
+
+  .blank.wrong {
+    border-color: #f0b4ad;
+    background: #fde8e5;
+    color: #b42318;
+  }
+
+  .side-body {
+    padding: 7px;
+  }
+
+  .paper-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    padding: 7px 8px;
+    border: 0;
+    border-bottom: 1px solid #eee8df;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .paper-row:last-child { border-bottom: 0; }
+
+  .paper-row.active {
+    border-radius: 6px;
+    background: #f0ede6;
+  }
+
+  .paper-name {
+    font-weight: 750;
+  }
+
+  .paper-score {
+    color: #6c6258;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .footer-note {
+    margin-top: 10px;
+    color: #70675d;
+    font-size: 12px;
+  }
+
+  @media (max-width: 980px) {
+    .shell { padding: 12px; }
+    .topbar { align-items: flex-start; flex-direction: column; }
+    .actions { justify-content: flex-start; width: 100%; }
+    .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .layout,
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 520px) {
+    .summary { grid-template-columns: 1fr; }
+    .actions > * { flex: 1 1 auto; }
+    .select { min-width: 100%; }
+    .task-input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="topbar">
+    <h1>套卷对错统计</h1>
+    <div class="actions">
+      <select class="select" id="paperSelect" aria-label="选择套卷"></select>
+      <input class="task-input" id="taskIdInput" type="text" placeholder="输入本套 Task ID" aria-label="本套Task ID">
+      <button class="btn" id="prevPaper" type="button">上一套</button>
+      <button class="btn dark" id="nextPaper" type="button">下一套卷子</button>
+      <button class="btn" id="exportExcel" type="button">导出Excel</button>
+      <button class="btn" id="toggleConfig" type="button">编辑试卷结构</button>
+      <button class="btn" id="resetCurrent" type="button">本套全对</button>
+      <button class="btn danger" id="deleteCurrent" type="button">删除本套</button>
+      <button class="btn primary" id="resetAll" type="button">全部重来</button>
+    </div>
+  </div>
+
+  <section class="config-panel" id="configPanel">
+    <p class="config-help">每个大题单独写一行；下一行写“显示分组：题号”。连续单空题会放在一起。多级小题用“题号(空数)”表示。</p>
+    <textarea class="config-editor" id="configEditor" spellcheck="false"></textarea>
+    <div class="config-buttons">
+      <button class="btn dark" id="applyConfig" type="button">应用并生成</button>
+      <button class="btn" id="restoreExample" type="button">恢复示例结构</button>
+    </div>
+    <div class="config-message" id="configMessage"></div>
+  </section>
+
+  <section class="summary" aria-label="当前套卷统计">
+    <div class="stat">
+      <div class="stat-label">当前套卷</div>
+      <div class="stat-value" id="paperName">1</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">空正确</div>
+      <div class="stat-value" id="rightTotal">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">空错误</div>
+      <div class="stat-value" id="wrongTotal">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">总空数</div>
+      <div class="stat-value" id="blankTotal">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">空正确率</div>
+      <div class="stat-value" id="accuracyTotal">100%</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">整题正确</div>
+      <div class="stat-value" id="questionRightTotal">18</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">整题正确率</div>
+      <div class="stat-value" id="questionAccuracyTotal">100%</div>
+    </div>
+  </section>
+
+  <div class="bar" aria-hidden="true">
+    <div class="bar-fill" id="accuracyBar"></div>
+  </div>
+
+  <section class="layout">
+    <div class="grid" id="counterGrid" aria-label="每个空的对错"></div>
+    <aside class="side">
+      <div class="side-head">
+        <div class="side-title">所有套卷</div>
+      </div>
+      <div class="side-body" id="paperList"></div>
+    </aside>
+  </section>
+
+  <div class="footer-note" id="footerNote"></div>
+</main>
+
+<script>
+  const STORAGE_KEY = "question_counter_configurable_v3";
+  const CONFIG_KEY = "question_counter_structure_v1";
+  const DEFAULT_CONFIG = `第一大题
+选择题：1-8
+
+第二大题
+选择题：9-12
+分级题：13(2)、14(2)、15(2)、16(3)、17(2)、18(3)`;
+
+  const defaultTemplate = [
+    {
+      id: "major_1",
+      title: "第一大题",
+      groups: [
+        { id: "q1", name: "1题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q2", name: "2题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q3", name: "3题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q4", name: "4题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q5", name: "5题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q6", name: "6题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q7", name: "7题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q8", name: "8题", note: "选择题", category: "选择题", count: 1 }
+      ]
+    },
+    {
+      id: "major_2",
+      title: "第二大题",
+      groups: [
+        { id: "q9", name: "9题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q10", name: "10题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q11", name: "11题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q12", name: "12题", note: "选择题", category: "选择题", count: 1 },
+        { id: "q13", name: "13题", note: "2个三级小题", count: 2 },
+        { id: "q14", name: "14题", note: "2个三级小题", count: 2 },
+        { id: "q15", name: "15题", note: "2个三级小题", count: 2 },
+        { id: "q16", name: "16题", note: "3个三级小题", count: 3 },
+        { id: "q17", name: "17题", note: "2个三级小题", count: 2 },
+        { id: "q18", name: "18题", note: "3个三级小题", count: 3 }
+      ]
+    }
+  ];
+
+  function parseStructure(text) {
+    const sections = [];
+    const usedQuestions = new Set();
+    let currentSection = null;
+
+    String(text).split(/\r?\n/).forEach(rawLine => {
+      const line = rawLine.trim();
+      if (!line) return;
+
+      const separator = line.search(/[：:]/);
+      if (separator < 0) {
+        currentSection = {
+          id: `major_${sections.length + 1}`,
+          title: line.replace(/[：:]$/, ""),
+          groups: []
+        };
+        sections.push(currentSection);
+        return;
+      }
+
+      if (!currentSection) throw new Error("请先写大题名称，再写题目分组。");
+      const category = line.slice(0, separator).trim() || "题目";
+      const expression = line.slice(separator + 1).trim()
+        .replace(/[（]/g, "(")
+        .replace(/[）]/g, ")")
+        .replace(/题/g, "");
+      const tokens = expression.split(/[、,，;；\s]+/).filter(Boolean);
+      if (!tokens.length) throw new Error(`“${category}”后面没有题号。`);
+
+      tokens.forEach(token => {
+        const range = token.match(/^(\d+)\s*[-—~～至]\s*(\d+)$/);
+        const single = token.match(/^(\d+)(?:\((\d+)\))?$/);
+        const addQuestion = (number, count = 1) => {
+          if (usedQuestions.has(number)) throw new Error(`${number}题重复出现了。`);
+          if (count < 1) throw new Error(`${number}题的空数必须大于0。`);
+          usedQuestions.add(number);
+          currentSection.groups.push({
+            id: `q${number}`,
+            name: `${number}题`,
+            note: count === 1 ? category : `${category} · ${count}个空`,
+            category,
+            count
+          });
+        };
+
+        if (range) {
+          const start = Number(range[1]);
+          const end = Number(range[2]);
+          if (end < start) throw new Error(`题号范围“${token}”顺序不正确。`);
+          for (let number = start; number <= end; number += 1) addQuestion(number);
+        } else if (single) {
+          addQuestion(Number(single[1]), Number(single[2] || 1));
+        } else {
+          throw new Error(`无法识别“${token}”，请使用 1-8 或 13(2) 这样的写法。`);
+        }
+      });
+    });
+
+    if (!sections.length || !usedQuestions.size) throw new Error("没有识别到试卷题目。");
+    sections.forEach(section => {
+      if (!section.groups.length) throw new Error(`“${section.title}”下面没有题目。`);
+    });
+    return sections;
+  }
+
+  function loadTemplate() {
+    const saved = localStorage.getItem(CONFIG_KEY);
+    if (!saved) return parseStructure(DEFAULT_CONFIG);
+    try {
+      return parseStructure(saved);
+    } catch {
+      return defaultTemplate;
+    }
+  }
+
+  let template = loadTemplate();
+
+  let state = loadState();
+
+  function blankIds() {
+    const ids = [];
+    template.forEach(section => {
+      section.groups.forEach(group => {
+        for (let index = 1; index <= group.count; index += 1) {
+          ids.push(`${group.id}_${index}`);
+        }
+      });
+    });
+    return ids;
+  }
+
+  function createPaper(number) {
+    const answers = {};
+    blankIds().forEach(id => {
+      answers[id] = true;
+    });
+
+    return {
+      id: `paper_${Date.now()}_${number}`,
+      name: `第${number}套`,
+      taskId: "",
+      answers
+    };
+  }
+
+  function normalizePaper(paper, index) {
+    const fresh = createPaper(index + 1);
+    return {
+      id: paper.id || fresh.id,
+      name: paper.name || `第${index + 1}套`,
+      taskId: paper.taskId || "",
+      answers: { ...fresh.answers, ...(paper.answers || {}) }
+    };
+  }
+
+  function loadState() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) {
+      return { activeIndex: 0, papers: [createPaper(1)] };
+    }
+
+    try {
+      const parsed = JSON.parse(saved);
+      const papers = Array.isArray(parsed.papers) && parsed.papers.length > 0
+        ? parsed.papers.map(normalizePaper)
+        : [createPaper(1)];
+      const activeIndex = Math.min(Math.max(Number(parsed.activeIndex) || 0, 0), papers.length - 1);
+      return { activeIndex, papers };
+    } catch {
+      return { activeIndex: 0, papers: [createPaper(1)] };
+    }
+  }
+
+  function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function activePaper() {
+    return state.papers[state.activeIndex];
+  }
+
+  function totalsForPaper(paper) {
+    const ids = blankIds();
+    const wrong = ids.filter(id => paper.answers[id] === false).length;
+    const total = ids.length;
+    return { right: total - wrong, wrong, total };
+  }
+
+  function totalsForGroup(paper, group) {
+    let wrong = 0;
+    for (let index = 1; index <= group.count; index += 1) {
+      if (paper.answers[`${group.id}_${index}`] === false) wrong += 1;
+    }
+    return { right: group.count - wrong, wrong, total: group.count };
+  }
+
+  function totalsForSection(paper, section) {
+    return section.groups.reduce((sum, group) => {
+      const current = totalsForGroup(paper, group);
+      sum.right += current.right;
+      sum.wrong += current.wrong;
+      sum.total += current.total;
+      return sum;
+    }, { right: 0, wrong: 0, total: 0 });
+  }
+
+  function accuracy(total) {
+    return total.total === 0 ? 0 : Math.round((total.right / total.total) * 100);
+  }
+
+  function questionTotalsForPaper(paper) {
+    const groups = template.flatMap(section => section.groups);
+    const right = groups.filter(group => totalsForGroup(paper, group).wrong === 0).length;
+    return { right, wrong: groups.length - right, total: groups.length };
+  }
+
+  function allGroups() {
+    return template.flatMap(section => section.groups.map(group => ({ section, group })));
+  }
+
+  function blankLabel(group, index) {
+    return group.count === 1 ? group.name : `${group.name}-${index}`;
+  }
+
+  function renderSelect() {
+    const select = document.getElementById("paperSelect");
+    select.innerHTML = state.papers.map((paper, index) => (
+      `<option value="${index}" ${index === state.activeIndex ? "selected" : ""}>${paper.name}</option>`
+    )).join("");
+    document.getElementById("taskIdInput").value = activePaper().taskId || "";
+  }
+
+  function renderSummary() {
+    const paper = activePaper();
+    const total = totalsForPaper(paper);
+    const percent = accuracy(total);
+
+    document.getElementById("paperName").textContent = state.activeIndex + 1;
+    document.getElementById("rightTotal").textContent = total.right;
+    document.getElementById("wrongTotal").textContent = total.wrong;
+    document.getElementById("blankTotal").textContent = total.total;
+    const questionTotal = questionTotalsForPaper(paper);
+    document.getElementById("accuracyTotal").textContent = `${percent}%`;
+    document.getElementById("questionRightTotal").textContent = questionTotal.right;
+    document.getElementById("questionAccuracyTotal").textContent = `${accuracy(questionTotal)}%`;
+    document.getElementById("accuracyBar").style.width = `${percent}%`;
+  }
+
+  function renderGrid() {
+    const paper = activePaper();
+    const grid = document.getElementById("counterGrid");
+    grid.innerHTML = "";
+
+    template.forEach(section => {
+      const total = totalsForSection(paper, section);
+      const displayRows = [];
+      section.groups.forEach(group => {
+        const previous = displayRows[displayRows.length - 1];
+        if (group.count === 1 && previous && previous.merged && previous.category === group.category) {
+          previous.groups.push(group);
+        } else {
+          displayRows.push({
+            merged: group.count === 1,
+            category: group.category || group.note,
+            groups: [group]
+          });
+        }
+      });
+      const article = document.createElement("article");
+      article.className = "section";
+      article.innerHTML = `
+        <div class="section-head">
+          <div class="section-title">${section.title}</div>
+          <div class="section-total">对 ${total.right} · 错 ${total.wrong} · ${accuracy(total)}%</div>
+        </div>
+        <div class="groups">
+          ${displayRows.map(row => {
+            const rowGroups = row.groups;
+            const rowTotal = rowGroups.reduce((sum, group) => {
+              const current = totalsForGroup(paper, group);
+              sum.right += current.right;
+              sum.total += current.total;
+              return sum;
+            }, { right: 0, total: 0 });
+            const heading = row.merged ? row.category : rowGroups[0].name;
+            const note = row.merged
+              ? `${rowGroups[0].name.replace("题", "")}–${rowGroups[rowGroups.length - 1].name}`
+              : rowGroups[0].note;
+            return `
+              <div class="group">
+                <div class="group-line">
+                  <div class="group-name">
+                    ${heading}
+                    <span class="group-note">${note}</span>
+                  </div>
+                  <div class="group-total">对 ${rowTotal.right} / ${rowTotal.total}</div>
+                </div>
+                <div class="blanks">
+                  ${rowGroups.flatMap(group => Array.from({ length: group.count }, (_, index) => {
+                    const blankNumber = index + 1;
+                    const id = `${group.id}_${blankNumber}`;
+                    const isRight = paper.answers[id] !== false;
+                    const label = row.merged ? group.name : blankNumber;
+                    return `<button class="blank ${isRight ? "" : "wrong"}" type="button" data-id="${id}" aria-label="${section.title}${group.name}第${blankNumber}空">${label} ${isRight ? "✓" : "×"}</button>`;
+                  })).join("")}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+      grid.appendChild(article);
+    });
+  }
+
+  function renderPaperList() {
+    const list = document.getElementById("paperList");
+    list.innerHTML = state.papers.map((paper, index) => {
+      const total = totalsForPaper(paper);
+      return `
+        <button class="paper-row ${index === state.activeIndex ? "active" : ""}" type="button" data-index="${index}">
+          <span class="paper-name">${paper.name}${paper.taskId ? ` · ${escapeCell(paper.taskId)}` : " · 未填Task ID"}</span>
+          <span class="paper-score">错 ${total.wrong} · ${accuracy(total)}%</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function render() {
+    renderSelect();
+    renderSummary();
+    renderGrid();
+    renderPaperList();
+    const questionTotal = allGroups().length;
+    const blankTotal = blankIds().length;
+    document.getElementById("footerNote").textContent =
+      `当前结构共${questionTotal}题、${blankTotal}个空。默认每个空都是对的；导出 Excel 同时包含空维度和题维度，题下所有空都对才算整题正确。`;
+  }
+
+  function escapeCell(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function tableRow(cells, tag = "td") {
+    return `<tr>${cells.map(cell => (
+      cell && typeof cell === "object" && cell.html
+        ? cell.html
+        : `<${tag}>${escapeCell(cell)}</${tag}>`
+    )).join("")}</tr>`;
+  }
+
+  function exportExcel() {
+    const missingTaskIndex = state.papers.findIndex(paper => !paper.taskId);
+    if (missingTaskIndex >= 0) {
+      state.activeIndex = missingTaskIndex;
+      saveState();
+      render();
+      document.getElementById("taskIdInput").focus();
+      alert(`${state.papers[missingTaskIndex].name}还没有填写 Task ID，请填写后再导出。`);
+      return;
+    }
+    const groups = allGroups();
+    const blankColumns = groups.flatMap(({ group }) =>
+      Array.from({ length: group.count }, (_, index) => ({
+        id: `${group.id}_${index + 1}`,
+        label: blankLabel(group, index + 1)
+      }))
+    );
+
+    const blankRightCounts = blankColumns.map(item =>
+      state.papers.filter(paper => paper.answers[item.id] !== false).length
+    );
+    const questionRightCounts = groups.map(({ group }) =>
+      state.papers.filter(paper => totalsForGroup(paper, group).wrong === 0).length
+    );
+    const paperCount = state.papers.length;
+    const totalBlankRight = blankRightCounts.reduce((sum, count) => sum + count, 0);
+    const totalQuestionRight = questionRightCounts.reduce((sum, count) => sum + count, 0);
+    const overallBlankRatio = totalBlankRight / (paperCount * blankColumns.length);
+    const overallQuestionRatio = totalQuestionRight / (paperCount * groups.length);
+    const percent2 = ratio => `${(ratio * 100).toFixed(2)}%`;
+    const decimal9 = ratio => ratio.toFixed(9);
+    const rateClass = ratio => ratio < 0.7 ? "rate-red" : ratio < 0.9 ? "rate-yellow" : "";
+    const rateCell = (ratio, text, colspan = 1) => ({
+      html: `<td class="${rateClass(ratio)}"${colspan > 1 ? ` colspan="${colspan}"` : ""}>${escapeCell(text)}</td>`
+    });
+    const totalColumnCount = 2 + blankColumns.length + 4;
+    const combinedRows = [
+      `<tr>
+        <th rowspan="2" class="suite-head">套卷</th>
+        <th rowspan="2" class="suite-head">Task ID</th>
+        ${groups.map(({ group }) => `<th colspan="${group.count}" class="question-head">题-${escapeCell(group.name)}</th>`).join("")}
+        <th rowspan="2" class="summary-head">答题区批改正确数</th>
+        <th rowspan="2" class="summary-head">试题批改正确数</th>
+        <th rowspan="2" class="summary-head">答题批改正确率</th>
+        <th rowspan="2" class="summary-head">试题批改正确率</th>
+      </tr>`,
+      `<tr>${blankColumns.map(item => `<th class="blank-head">空-${escapeCell(item.label)}</th>`).join("")}</tr>`,
+      ...state.papers.map(paper => {
+        const blankTotal = totalsForPaper(paper);
+        const questionTotal = questionTotalsForPaper(paper);
+        return tableRow([
+          paper.name,
+          paper.taskId || "",
+          ...blankColumns.map(item => paper.answers[item.id] === false ? 0 : 1),
+          blankTotal.right,
+          questionTotal.right,
+          rateCell(blankTotal.right / blankTotal.total, percent2(blankTotal.right / blankTotal.total)),
+          rateCell(questionTotal.right / questionTotal.total, percent2(questionTotal.right / questionTotal.total))
+        ]);
+      }),
+      `<tr><td colspan="${totalColumnCount}">&nbsp;</td></tr>`,
+      tableRow([
+        "计数", "",
+        ...blankColumns.map(() => paperCount),
+        paperCount, paperCount, "", ""
+      ]),
+      tableRow([
+        "总计", "",
+        ...blankRightCounts,
+        totalBlankRight,
+        totalQuestionRight,
+        rateCell(overallBlankRatio, decimal9(overallBlankRatio)),
+        rateCell(overallQuestionRatio, decimal9(overallQuestionRatio))
+      ]),
+      tableRow([
+        "作答区准确率", "",
+        ...blankRightCounts.map(count => rateCell(count / paperCount, percent2(count / paperCount))),
+        "", "", rateCell(overallBlankRatio, decimal9(overallBlankRatio)), ""
+      ]),
+      `<tr>
+        <td>试题准确率</td>
+        <td></td>
+        ${groups.map(({ group }, index) => {
+          const ratio = questionRightCounts[index] / paperCount;
+          return `<td colspan="${group.count}" class="${rateClass(ratio)}">${percent2(ratio)}</td>`;
+        }).join("")}
+        <td></td><td></td><td></td><td class="${rateClass(overallQuestionRatio)}">${decimal9(questionRightCounts.reduce((sum, count) => sum + (count / paperCount), 0) / groups.length)}</td>
+      </tr>`
+    ].join("");
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            table { border-collapse: collapse; margin-bottom: 18px; }
+            th, td { border: 1px solid #999; padding: 6px 10px; text-align: center; white-space: nowrap; }
+            td:nth-child(2) { mso-number-format: "\\@"; }
+            th { background: #e8e8e8; font-weight: bold; }
+            .suite-head { background: #dbeafe; }
+            .blank-head { background: #dcfce7; }
+            .question-head { background: #fef3c7; }
+            .summary-head { background: #ede9fe; }
+            .rate-red { background: #f8a5a5; color: #7f1d1d; font-weight: bold; }
+            .rate-yellow { background: #fde68a; color: #713f12; font-weight: bold; }
+            .title { font-size: 18px; font-weight: bold; margin: 12px 0 8px; }
+          </style>
+        </head>
+        <body>
+          <div class="title">套卷统计表（题维度 / 空维度）</div>
+          <table>${combinedRows}</table>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `套卷_空_题合并统计_${date}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("counterGrid").addEventListener("click", event => {
+    const button = event.target.closest(".blank");
+    if (!button) return;
+
+    const paper = activePaper();
+    const id = button.dataset.id;
+    paper.answers[id] = paper.answers[id] === false;
+    saveState();
+    render();
+  });
+
+  document.getElementById("paperSelect").addEventListener("change", event => {
+    state.activeIndex = Number(event.target.value);
+    saveState();
+    render();
+  });
+
+  document.getElementById("taskIdInput").addEventListener("input", event => {
+    activePaper().taskId = event.target.value.trim();
+    saveState();
+    renderPaperList();
+  });
+
+  document.getElementById("paperList").addEventListener("click", event => {
+    const button = event.target.closest(".paper-row");
+    if (!button) return;
+
+    state.activeIndex = Number(button.dataset.index);
+    saveState();
+    render();
+  });
+
+  document.getElementById("prevPaper").addEventListener("click", () => {
+    state.activeIndex = Math.max(0, state.activeIndex - 1);
+    saveState();
+    render();
+  });
+
+  document.getElementById("nextPaper").addEventListener("click", () => {
+    if (!activePaper().taskId) {
+      document.getElementById("taskIdInput").focus();
+      alert("请先填写当前套卷的 Task ID，再进入下一套。");
+      return;
+    }
+    if (state.activeIndex === state.papers.length - 1) {
+      state.papers.push(createPaper(state.papers.length + 1));
+    }
+    state.activeIndex += 1;
+    saveState();
+    render();
+  });
+
+  document.getElementById("exportExcel").addEventListener("click", exportExcel);
+
+  document.getElementById("toggleConfig").addEventListener("click", () => {
+    const panel = document.getElementById("configPanel");
+    panel.classList.toggle("open");
+    document.getElementById("toggleConfig").textContent = panel.classList.contains("open")
+      ? "收起结构编辑"
+      : "编辑试卷结构";
+  });
+
+  document.getElementById("applyConfig").addEventListener("click", () => {
+    const editor = document.getElementById("configEditor");
+    const message = document.getElementById("configMessage");
+    try {
+      const nextTemplate = parseStructure(editor.value);
+      template = nextTemplate;
+      localStorage.setItem(CONFIG_KEY, editor.value.trim());
+      state.papers = state.papers.map(normalizePaper);
+      saveState();
+      message.style.color = "#176b45";
+      message.textContent = `已生成：${allGroups().length}题、${blankIds().length}个空。`;
+      render();
+    } catch (error) {
+      message.style.color = "#b42318";
+      message.textContent = error.message;
+    }
+  });
+
+  document.getElementById("restoreExample").addEventListener("click", () => {
+    document.getElementById("configEditor").value = DEFAULT_CONFIG;
+    document.getElementById("configMessage").textContent = "示例已放入编辑框，点击“应用并生成”后生效。";
+  });
+
+  document.getElementById("resetCurrent").addEventListener("click", () => {
+    activePaper().answers = createPaper(state.activeIndex + 1).answers;
+    saveState();
+    render();
+  });
+
+  document.getElementById("deleteCurrent").addEventListener("click", () => {
+    if (state.papers.length === 1) {
+      alert("至少需要保留一套卷子，最后一套不能删除。");
+      return;
+    }
+
+    const paper = activePaper();
+    const taskInfo = paper.taskId ? `（Task ID：${paper.taskId}）` : "";
+    if (!confirm(`确定删除${paper.name}${taskInfo}吗？删除后无法恢复。`)) return;
+
+    state.papers.splice(state.activeIndex, 1);
+    state.papers.forEach((item, index) => {
+      item.name = `第${index + 1}套`;
+    });
+    state.activeIndex = Math.min(state.activeIndex, state.papers.length - 1);
+    saveState();
+    render();
+  });
+
+  document.getElementById("resetAll").addEventListener("click", () => {
+    state = { activeIndex: 0, papers: [createPaper(1)] };
+    saveState();
+    render();
+  });
+
+  document.getElementById("configEditor").value = localStorage.getItem(CONFIG_KEY) || DEFAULT_CONFIG;
+  render();
+</script>
+</body>
+</html>
+
