@@ -1,6 +1,6 @@
-# 图片批阅标注工具 + 结果查看工具 + 主观题批改工具
+# 图片批阅标注工具 + 结果查看工具 + 主观题批改工具 + 套卷统计工具
 
-本项目包含三个基于浏览器的本地静态网页工具，配合一个迁移脚本，构成完整的「标注 → 查看 → 分析」数据流：
+本项目包含四个基于浏览器的本地静态网页工具，配合一个迁移脚本，构成完整的「标注 → 查看 → 分析」数据流：
 
 1. **图片批阅标注工具** — 用矩形框（bbox）在图片上框选错误位置，每个框绑定一个错误类型和说明。支持导出 ZIP 和 Excel 统计表。
    **[https://octavia-11.github.io/grading--tool/annotation-tool.html](https://octavia-11.github.io/grading--tool/annotation-tool.html)**
@@ -8,7 +8,9 @@
    **[https://octavia-11.github.io/grading--tool/result-viewer.html](https://octavia-11.github.io/grading--tool/result-viewer.html)**
 3. **主观题批改工具**（新) — 基于 VLM 后端返回的 task json,在卷面答题线上点选/键盘切换标记错空,挂错误原因,导出结构化 JSON 和 Excel 统计表。适合"留痕与详情"格式的卷子(`task_<uuid>.json` + 图片 + metadata.yaml)。
    **[https://octavia-11.github.io/grading--tool/demo-subjective.html](https://octavia-11.github.io/grading--tool/demo-subjective.html)**
-4. **迁移脚本** `migrate_legacy_zip.py` — 把旧版（marked_*.jpg + error_info.txt）结果迁移到新 schema。
+4. **套卷对错统计工具** — 可配置大题、连续单空题与多级小题结构，逐套录入 Task ID 并点选对错；Excel 同时导出题/空两层表头、套卷汇总、准确率统计和颜色预警。
+   **[https://octavia-11.github.io/grading--tool/question-counter.html](https://octavia-11.github.io/grading--tool/question-counter.html)**
+5. **迁移脚本** `migrate_legacy_zip.py` — 把旧版（marked_*.jpg + error_info.txt）结果迁移到新 schema。
 
 所有数据均在浏览器本地处理，不会上传到任何服务器。
 
@@ -156,11 +158,12 @@ key 格式:`<question_id>-<subIdx>`(subIdx 为 `whole` 表示整题级,数字表
 
 ## 🚀 在线使用（推荐）
 
-三个工具均可通过 **GitHub Pages** 部署，无需下载安装：
+四个工具均可通过 **GitHub Pages** 部署，无需下载安装：
 
 - **标注工具** 👉 [https://octavia-11.github.io/grading--tool/annotation-tool.html](https://octavia-11.github.io/grading--tool/annotation-tool.html)
 - **结果查看工具** 👉 [https://octavia-11.github.io/grading--tool/result-viewer.html](https://octavia-11.github.io/grading--tool/result-viewer.html)
 - **主观题批改工具** 👉 [https://octavia-11.github.io/grading--tool/demo-subjective.html](https://octavia-11.github.io/grading--tool/demo-subjective.html)
+- **套卷对错统计工具** 👉 [https://octavia-11.github.io/grading--tool/question-counter.html](https://octavia-11.github.io/grading--tool/question-counter.html)
 
 > 所有图片和数据均在浏览器本地处理，不会上传到任何服务器。
 
@@ -330,6 +333,8 @@ reason → category 映射见 `reason_map.yaml`。
 |------|------|
 | `annotation-tool.html` | **标注工具**主页面 |
 | `result-viewer.html` | **结果查看工具**主页面 |
+| `demo-subjective.html` | **主观题批改工具**主页面 |
+| `question-counter.html` | **套卷对错统计工具**：自定义试卷结构、Task ID、题/空维度 Excel 统计 |
 | `taxonomy.json` / `taxonomy.js` | 错误分类法（数据 + file:// 兼容包装） |
 | `docs/schema.md` | annotation.json 字段定义 |
 | `migrate_legacy_zip.py` | 旧 ZIP/目录 → v2 schema 迁移脚本 |
